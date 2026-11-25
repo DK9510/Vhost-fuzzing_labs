@@ -1,0 +1,67 @@
+C02 - CERTIFICATE SAN/CN AS A DISCOVERY SOURCE
+================================================
+Lab      : c02-cert-san
+Case     : C2 (writeup para 16)
+Ports    : HTTP 18090, HTTPS 18453
+Start    : make up LAB=c02-cert-san
+Verify   : make verify LAB=c02-cert-san      (11 assertions)
+
+OBJECTIVE
+  Read the TLS certificate the IP hands out, turn it into a hostname list, then
+  separate what the certificate CLAIMS from what the front end actually SERVES.
+
+STEP 1 - grab the certificate (tool path from the writeup)
+  /Users/dk/.pdtm/go/bin/tlsx -u 127.0.0.1:18453 -san -cn -silent
+
+  expected:
+    127.0.0.1:18453 [corp.lab]
+    127.0.0.1:18453 [mail.corp.lab]
+    (the short form hides the wildcard - use -json)
+
+  /Users/dk/.pdtm/go/bin/tlsx -u 127.0.0.1:18453 -san -cn -silent -json | \
+    jq '{cn:.subject_cn, an:.subject_an, wildcard:.wildcard_certificate}'
+
+  expected:
+    {"cn":"corp.lab",
+     "an":["corp.lab","*.corp.lab","mail.corp.lab"],
+     "wildcard":true}
+
+  Note: the binary at /opt/homebrew/bin/httpx is python-httpx; ProjectDiscovery
+  lives in /Users/dk/.pdtm/go/bin. Same trap applies to every PD tool.
+
+STEP 2 - same answer with openssl (no tools required)
+  openssl s_client -connect 127.0.0.1:18453 -servername corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | sed -n '/Subject Alternative Name/,+1p'
+
+  expected:
+    X509v3 Subject Alternative Name:
+      DNS:corp.lab, DNS:*.corp.lab, DNS:mail.corp.lab
+
+  macOS ships LibreSSL: x509 -ext subjectAltName is unsupported, use -text.
+
+STEP 3 - a name in the certificate is a candidate, not a finding
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: mail.corp.lab' https://127.0.0.1:18453/
+  expected: 404
+  curl -skI -H 'Host: mail.corp.lab' https://127.0.0.1:18453/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   (no site behind that name)
+
+STEP 4 - the apex is served
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: corp.lab' https://127.0.0.1:18453/
+  expected: 200
+
+STEP 5 - wildcard certificate != wildcard routing
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: zzz.corp.lab' https://127.0.0.1:18453/
+  expected: 404
+
+STEP 6 - no SNI still returns the same certificate
+  openssl s_client -connect 127.0.0.1:18453 </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | grep -A1 'Subject Alternative Name'
+  expected: the same three names (this is why passive grabs work)
+
+WHY IT MATTERS
+  *.corp.lab means any single-label subdomain is a legitimate certificate name,
+  so the next step is enumerating labels, not guessing domains. C03 does exactly
+  that against the same IP.
+
+TEARDOWN
+  make down LAB=c02-cert-san

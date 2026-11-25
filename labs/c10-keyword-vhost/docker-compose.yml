@@ -1,0 +1,62 @@
+name: vhc10
+
+services:
+  edge:
+    image: vhostlab/edge:1.0
+    container_name: vhc10-edge
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:18170:8080"
+      - "0.0.0.0:18533:8443"
+    volumes:
+      - ./edge/sites.json:/etc/vhostlab/sites.json:ro
+      - ./edge/certs:/certs:ro
+      - ./sites:/sites:ro
+    networks:
+      lab:
+
+  portal:
+    image: vhostlab/api:1.0
+    container_name: vhc10-portal
+    restart: unless-stopped
+    environment:
+      DEBUG: "0"
+      BROWSABLE: "1"
+      FLAG: "${FLAG:-FLAG{keyword_routed_app}}"
+      BASE_DOMAIN: "corp.lab"
+      API_HOST: "portal"
+      ADMIN_EMAIL: "admin@corp.lab"
+      ADMIN_PASSWORD: "Sup3rS3cret!2026"
+      AGENT_PASSWORD: "agent-pass-2026"
+      JWT_KEY: "vhc10-jwt-key-do-not-reuse"
+      SECRET_KEY: "vhc10-django-secret"
+      DB_PATH: "/data/db.sqlite3"
+      EMAIL_HOST: "127.0.0.1"
+      EMAIL_PORT: "2525"
+    volumes:
+      - portal-data:/data
+    networks:
+      lab:
+        ipv4_address: 172.28.100.21
+
+  site-spa:
+    image: nginx:alpine
+    container_name: vhc10-spa
+    restart: unless-stopped
+    volumes:
+      - ./sites/spa:/spa:ro
+      - ./sites/spa/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.100.20
+
+volumes:
+  portal-data:
+    name: vhc10-portal-data
+
+networks:
+  lab:
+    name: vhc10-lab
+    ipam:
+      config:
+        - subnet: 172.28.100.0/24

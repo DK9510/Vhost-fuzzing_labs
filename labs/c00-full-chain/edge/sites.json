@@ -1,0 +1,78 @@
+{
+  "http_addr": ":8080",
+  "https_addr": ":8443",
+  "cert_file": "/certs/lab.crt",
+  "key_file": "/certs/lab.key",
+  "default_server": "Microsoft-HTTPAPI/2.0",
+  "sites": [
+    {
+      "host": "corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "case_insensitive": true,
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/real/" }]
+    },
+    {
+      "host": "chatadmin.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "case_insensitive": true,
+      "paths": [
+        { "prefix": "/chatadmin/", "upstream": "http://172.28.110.21:80", "rewrite": "/chatadmin/" },
+        { "prefix": "/chatadmin", "upstream": "http://172.28.110.21:80", "rewrite": "/chatadmin/index.html" },
+        { "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/real/" }
+      ]
+    },
+    {
+      "host": "vpn.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/d01/" }]
+    },
+    {
+      "host": "intranet.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/d02/" }]
+    },
+    {
+      "host": "owa.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/d03/" }]
+    },
+    {
+      "host": "citrix.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/d04/" }]
+    },
+    {
+      "host": "sso.corp.lab",
+      "upstream": "http://172.28.110.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.110.20:80", "rewrite": "/d05/" }]
+    },
+    {
+      "host": "old-portal.corp.lab",
+      "status": 403,
+      "body_file": "/sites/403.html",
+      "server": "Microsoft-HTTPAPI/2.0"
+    },
+    {
+      "host": "chat-api.corp.lab",
+      "upstream": "http://172.28.110.22:8000",
+      "server": "Microsoft-IIS/10.0"
+    }
+  ],
+  "keywords": [
+    { "contains": "portal.", "match": "suffix", "status": 404, "server": "Microsoft-HTTPAPI/2.0" },
+    {
+      "contains": "portal",
+      "ignore_case": true,
+      "upstream": "http://172.28.110.22:8000",
+      "server": "Microsoft-IIS/10.0",
+      "app_header": { "X-App": "portal" }
+    }
+  ]
+}

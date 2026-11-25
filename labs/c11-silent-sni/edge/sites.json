@@ -1,0 +1,25 @@
+{
+  "http_addr": ":8080",
+  "https_addr": ":8443",
+  "cert_file": "/certs/lab.crt",
+  "key_file": "/certs/lab.key",
+  "default_server": "OpsGate/1.0",
+  "silent": {
+    "require_sni": true,
+    "allow_sni": ["ops.corp.lab"],
+    "require_host": true,
+    "allow_host": ["ops.corp.lab"],
+    "hold_seconds": 20
+  },
+  "sites": [
+    {
+      "host": "ops.corp.lab",
+      "upstream": "http://172.28.120.20:80",
+      "server": "OpsGate/1.0",
+      "paths": [
+        { "prefix": "/health", "upstream": "http://172.28.120.20:80", "rewrite": "/health" },
+        { "prefix": "/", "upstream": "http://172.28.120.20:80", "rewrite": "/index.html" }
+      ]
+    }
+  ]
+}

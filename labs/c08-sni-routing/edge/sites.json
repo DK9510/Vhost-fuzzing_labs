@@ -1,0 +1,22 @@
+{
+  "http_addr": ":8080",
+  "https_addr": ":8443",
+  "cert_file": "/certs/lab.crt",
+  "key_file": "/certs/lab.key",
+  "sni": {
+    "internal.corp.lab": { "cert": "/certs/internal.crt", "key": "/certs/internal.key" }
+  },
+  "default_server": "Microsoft-HTTPAPI/2.0",
+  "sites": [
+    {
+      "host": "app.corp.lab",
+      "upstream": "http://172.28.80.20:80",
+      "server": "Microsoft-IIS/10.0"
+    },
+    {
+      "host": "admin.internal.corp.lab",
+      "upstream": "http://172.28.80.21:80",
+      "server": "Microsoft-IIS/10.0"
+    }
+  ]
+}

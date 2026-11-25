@@ -1,0 +1,24 @@
+== c11 silent SNI/Host gate ==
+PASS  https://<ip> without SNI -> no response (timeout)
+PASS  https://<ip> without SNI -> zero bytes of status
+PASS  https://<ip> with SNI unknown.corp.lab -> no response (timeout)
+PASS  https://<ip> with SNI unknown.corp.lab -> zero bytes of status
+PASS  correct SNI, Host: chatadmin.corp.lab -> no response (timeout)
+PASS  correct SNI, Host: chatadmin.corp.lab -> zero bytes of status
+PASS  http://<ip> with no Host override -> no response (timeout)
+PASS  http://<ip> with no Host override -> zero bytes of status
+PASS  http://<ip> Host: vpn.corp.lab -> no response (timeout)
+PASS  http://<ip> Host: vpn.corp.lab -> zero bytes of status
+PASS  http with empty Host header -> no response
+PASS  no SNI -> no certificate offered
+PASS  SNI + Host both ops.corp.lab -> 200
+PASS  console page served
+PASS  flag on the console page
+PASS  front end identifies itself
+PASS  health endpoint via plain HTTP + Host
+PASS  Host: ops.corp.lab:443 accepted
+PASS  Host with trailing dot -> silence
+PASS  certificate is the wildcard leaf
+
+-- 20 passed, 0 failed --
+RESULT PASS

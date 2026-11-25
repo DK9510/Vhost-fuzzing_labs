@@ -1,0 +1,20 @@
+== c05 JS bundle -> API vhost ==
+PASS  SPA shell 200
+PASS  bundle 200
+PASS  bundle API_BASE extracted
+PASS  API_BASE host
+PASS  API_BASE /api/ is live
+PASS  API_BASE /api/chat-status is live
+PASS  API root lists the surface
+PASS  decoy pointer extracted
+PASS  decoy host does not exist -> 404
+PASS  api vhost 404 says Microsoft-IIS/10.0
+PASS  bare IP 404 says Microsoft-HTTPAPI/2.0
+PASS  api 404 body differs from the bare-IP wall
+PASS  bare-IP wall is empty
+PASS  api 404 is the IIS error page
+PASS  api root is not the SPA shell
+PASS  api root is JSON
+
+-- 16 passed, 0 failed --
+RESULT PASS

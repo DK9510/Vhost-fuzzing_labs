@@ -1,0 +1,64 @@
+C04 - CONTENT DISCOVERY ON A DEFAULT PAGE
+==========================================
+Lab      : c04-content-discovery
+Case     : C4 (writeup para 32-42)
+Ports    : HTTP 18110, HTTPS 18473
+Start    : make up LAB=c04-content-discovery
+Verify   : make verify LAB=c04-content-discovery      (15 assertions)
+
+OBJECTIVE
+  You have a vhost whose root is an IIS default page: nothing to crawl, nothing in
+  Wayback. Find the application root with active discovery and tell a hit from bait.
+
+STEP 1 - confirm there is nothing passive to chew on
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/ | grep -o 'IIS Windows Server'
+  expected: IIS Windows Server   (the default page)
+  There is no sitemap, no directory listing, no links into an app.
+
+STEP 2 - measure the baseline before fuzzing
+  curl -sk -o /dev/null -w '%{http_code} %{size_download}\n' \
+    -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/definitely-not-here
+  expected: 404 1232
+  The miss is a full IIS error page, so -fs 1232 removes ~56k identical answers.
+
+STEP 3 - discovery with the writeup's wordlist
+  W=/Users/dk/tools/wordlists/SecLists/Discovery/Web-Content/raft-large-directories-lowercase.txt
+  ffuf -u https://127.0.0.1:18473/FUZZ -H 'Host: chatadmin.corp.lab' \
+       -w "$W" -fs 1232 -fc 403 -t 40 -timeout 10 -of json -o /tmp/c04.json
+
+  jq -r '.results[] | "\(.status) \(.length) \(.input.FUZZ)"' /tmp/c04.json
+  expected: 200 357 chatadmin
+  (56 162 words, ~5 seconds against a local target; do not use -t 100 here,
+   requests get dropped and the one hit can be missed)
+
+STEP 4 - the app and its bundle
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin
+  expected: <div id="app">Chat Admin - internal live-chat management console.</div>
+
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin/assets/app.js
+  expected: window.__ENV = { API_BASE: "https://chat-api.corp.lab/api" };
+
+STEP 5 - case-insensitivity (why the lowercase wordlist is safe on IIS)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/CHATADMIN
+  expected: 200
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/ChatAdmin/
+  expected: 200
+
+STEP 6 - the bait
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/chatadmin.backup
+  expected: 403
+  The vhost knows the path and refuses it: a lead to keep, not an app root.
+
+STEP 7 - no directory listing (so discovery really is required)
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin/ | grep -c 'Index of /'
+  expected: 0
+
+WHY IT MATTERS
+  Measure the baseline first; filter on it. Then read the bundle - the next case
+  starts at the API_BASE you just found.
+
+TEARDOWN
+  make down LAB=c04-content-discovery

@@ -1,0 +1,45 @@
+name: vhc05
+
+services:
+  edge:
+    image: vhostlab/edge:1.0
+    container_name: vhc05-edge
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:18120:8080"
+      - "0.0.0.0:18483:8443"
+    volumes:
+      - ./edge/sites.json:/etc/vhostlab/sites.json:ro
+      - ./edge/certs:/certs:ro
+      - ./sites:/sites:ro
+    networks:
+      lab:
+
+  site-spa:
+    image: nginx:alpine
+    container_name: vhc05-spa
+    restart: unless-stopped
+    volumes:
+      - ./sites/spa:/spa:ro
+      - ./sites/spa/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.50.20
+
+  site-api:
+    image: nginx:alpine
+    container_name: vhc05-api
+    restart: unless-stopped
+    volumes:
+      - ./sites/api:/api:ro
+      - ./sites/api/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.50.21
+
+networks:
+  lab:
+    name: vhc05-lab
+    ipam:
+      config:
+        - subnet: 172.28.50.0/24

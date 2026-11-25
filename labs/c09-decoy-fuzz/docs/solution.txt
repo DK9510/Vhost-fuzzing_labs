@@ -1,0 +1,63 @@
+C09 - DECOY DISCIPLINE: 40 HOSTS, 1 REAL, ZERO FALSE POSITIVES
+===============================================================
+Lab      : c09-decoy-fuzz
+Case     : C9 (writeup para 30, triage discipline)
+Ports    : HTTP 18160, HTTPS 18523
+Start    : make up LAB=c09-decoy-fuzz
+Verify   : make verify LAB=c09-decoy-fuzz      (15 assertions)
+
+OBJECTIVE
+  Same sweep as C03 against an adversarial set: 39 look-alikes, including catch-alls
+  that answer 200 to every path and 8 hosts whose headers claim to be the real one.
+  The grade is precision.
+
+STEP 1 - enumerate the candidates
+  jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json
+  expected: 40 lines (chatadmin + 39 decoys)
+  The unbounded label list is _shared/data/vhost-labels.txt plus app01..app16.
+
+STEP 2 - score on body content, never on status
+  for h in $(jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json); do
+    b=$(curl -sk -H "Host: $h" https://127.0.0.1:18523/app)
+    case "$b" in *"Chat Admin"*) echo "HIT $h";; esac
+  done
+  expected: HIT chatadmin.corp.lab      (exactly one line)
+
+STEP 3 - see the traps fail
+  Catch-alls answer 200 everywhere:
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: monitor.corp.lab' \
+      https://127.0.0.1:18523/app
+    expected: 200
+    curl -sk -H 'Host: monitor.corp.lab' https://127.0.0.1:18523/app | grep -c 'Chat Admin'
+    expected: 0
+    (same for status.corp.lab)
+
+  Lures claim the real host in a response header:
+    for l in vpn intranet owa citrix sso webmail remote files; do
+      curl -sk -D - -o /dev/null -H "Host: $l.corp.lab" https://127.0.0.1:18523/ \
+        | tr -d '\r' | sed -n 's/^[Xx]-[Ff]orwarded-[Hh]ost: //p'
+    done | sort -u
+    expected: chatadmin.corp.lab     (8 hosts say it, none of them is it)
+
+STEP 4 - the roots are byte-identical
+  for h in $(jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json | grep -v chatadmin); do
+    curl -sk -H "Host: $h" https://127.0.0.1:18523/ | shasum -a1
+  done | sort -u | wc -l
+  expected: 1
+
+STEP 5 - the wall still holds for anything unlisted
+  curl -skI -H 'Host: not-in-scope.corp.lab' https://127.0.0.1:18523/ | grep -Ei 'HTTP/|server'
+  expected: 404 + server: Microsoft-HTTPAPI/2.0
+
+STEP 6 - regenerate and confirm determinism (optional)
+  python3 labs/c09-decoy-fuzz/gen.py
+  expected: "generated: 1 real + 39 decoys (8 lures, 2 catch-alls)"
+  Re-run verify: the tree is identical.
+
+WHY IT MATTERS
+  A vhost finding is a body/behaviour claim supported by two paths. Anything resting
+  on one 200, one header, or one length difference is the kind of thing that gets
+  closed as informational. The grade here is zero false positives, not a hit count.
+
+TEARDOWN
+  make down LAB=c09-decoy-fuzz

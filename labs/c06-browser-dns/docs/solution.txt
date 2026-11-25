@@ -1,0 +1,72 @@
+C06 - BROWSER PATH: DNS OVERRIDE, CA TRUST, BROWSABLE API
+==========================================================
+Lab      : c06-browser-dns
+Case     : C6 (writeup para 54)
+Ports    : HTTP 18130, HTTPS 18493
+Start    : make up LAB=c06-browser-dns
+Verify   : make verify LAB=c06-browser-dns      (11 assertions)
+
+OBJECTIVE
+  Stop using raw Host headers. Make the hostnames resolve and the certificate
+  trusted so the SPA and the API behave like they do for a real user - that is
+  where DRF's browsable API and sequence bugs actually show up.
+
+SETUP (one time)
+  Burp: Settings -> Network -> DNS -> Override hostname resolution
+        *.corp.lab  ->  127.0.0.1
+  Trust: import _shared/certs/out/ca.crt into Burp TLS and the browser
+         (scripts/import-ca.sh does the macOS keychain, run it by hand)
+  Browse: https://chatadmin.corp.lab:18493/chatadmin
+          https://chat-api.corp.lab:18493/api/
+
+  No /etc/hosts change is needed: every check uses curl --resolve.
+
+STEP 1 - content negotiation (what makes DRF browsable)
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18493/api/ | tr -d '\r' | grep -i content-type
+  expected: content-type: application/json
+
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | tr -d '\r' | grep -i content-type
+  expected: content-type: text/html; charset=utf-8
+
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | grep -o 'Django REST framework' | head -1
+  expected: Django REST framework
+
+STEP 2 - the SPA is the same deployment, not a separate host
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18493/chatadmin
+  expected: 200
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18493/chatadmin/assets/app.js | grep API_BASE
+  expected: API_BASE: "https://chat-api.corp.lab/api"
+
+STEP 3 - the certificate chains to the lab CA (so one import is enough)
+  openssl verify -CAfile _shared/certs/out/ca.crt \
+    labs/c06-browser-dns/edge/certs/lab.crt
+  expected: .../lab.crt: OK
+
+  It is the certificate actually served:
+  openssl s_client -connect 127.0.0.1:18493 -servername chat-api.corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -fingerprint -sha256
+  compare with:  openssl x509 -in labs/c06-browser-dns/edge/certs/lab.crt -noout -fingerprint -sha256
+
+STEP 4 - no redirect loops (a classic browser-only failure on vhosts)
+  curl -sk -o /dev/null -w '%{num_redirects}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18493/api/
+  expected: 0
+
+STEP 5 - what a browser must not be given
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | grep -c 'Index of /'
+  expected: 0
+
+WHY IT MATTERS
+  Once the browser resolves the vhosts, the browsable API shows endpoint shapes
+  (/api/auth/password_reset, /api/chats) that become the input to C07. Note the
+  deliberate absence of CORS headers: a report based only on "CORS missing" is not
+  this lab's target.
+
+TEARDOWN
+  make down LAB=c06-browser-dns

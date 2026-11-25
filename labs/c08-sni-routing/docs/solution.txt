@@ -1,0 +1,58 @@
+C08 - SNI VS HOST HEADER
+=========================
+Lab      : c08-sni-routing
+Case     : C8 (writeup para 16, SNI detail)
+Ports    : HTTP 18150, HTTPS 18513
+Start    : make up LAB=c08-sni-routing
+Verify   : make verify LAB=c08-sni-routing      (11 assertions)
+
+OBJECTIVE
+  Separate the two controls that get conflated in vhost work: SNI picks the
+  certificate, the Host header picks the site. Learn what a mismatch actually
+  means before you report the wrong thing.
+
+STEP 1 - two certificates, one listener
+  U=127.0.0.1:18513
+  fp() { openssl s_client -connect $U ${1:+-servername $1} </dev/null 2>/dev/null \
+         | openssl x509 -noout -fingerprint -sha256; }
+
+  fp corp.lab
+  expected: the public leaf fingerprint (labs/c08-sni-routing/edge/certs/lab.crt)
+
+  fp internal.corp.lab
+  expected: a DIFFERENT fingerprint (internal.crt)
+
+  fp nothing.corp.lab
+  expected: back to the public leaf (unknown SNI falls back to default)
+
+STEP 2 - the internal certificate names a different zone
+  openssl s_client -connect $U -servername internal.corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | sed -n '/Subject Alternative Name/,+1p'
+  expected: DNS:internal.corp.lab, DNS:*.internal.corp.lab   (no corp.lab in it)
+
+STEP 3 - routing ignores SNI entirely
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: app.corp.lab' https://$U/
+  expected: 200
+  curl -sk -H 'Host: admin.internal.corp.lab' https://$U/ | grep -o 'Internal Admin'
+  expected: Internal Admin        (200, while the PUBLIC certificate was presented)
+
+STEP 4 - and the internal certificate unlocks nothing by itself
+  curl -sk -o /dev/null -w '%{http_code}\n' --resolve app.corp.lab:18513:127.0.0.1 \
+    https://app.corp.lab:18513/
+  expected: 200   (public site; SNI choice does not change routing)
+
+STEP 5 - what the 4-way matrix shows
+  SNI corp.lab       + Host app.corp.lab              -> 200, public cert, no warning
+  SNI corp.lab       + Host admin.internal.corp.lab   -> 200, cert does not match Host
+                                                         (browser warning, full access)
+  SNI internal...    + Host admin.internal.corp.lab   -> 200, clean
+  SNI internal...    + Host app.corp.lab              -> 200, cert does not match Host
+
+WHY IT MATTERS
+  A mismatch warning is a certificate observation, not access to the internal zone.
+  "The certificate has a different name" is a lead about naming; "the Host header
+  reaches a site" is a lead about routing. Two separate findings, each needing its
+  own impact. And unknown-SNI fallback is why passive certificate grabs work.
+
+TEARDOWN
+  make down LAB=c08-sni-routing

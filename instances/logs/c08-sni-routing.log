@@ -1,0 +1,15 @@
+== c08 SNI vs Host ==
+PASS  two different certs exist
+PASS  SNI corp.lab -> default cert
+PASS  SNI internal.corp.lab -> internal cert
+PASS  unknown SNI falls back to the default cert
+PASS  internal cert carries *.internal.corp.lab
+PASS  internal cert does not carry the public apex
+PASS  Host app.corp.lab -> 200
+PASS  Host admin.internal.corp.lab -> 200 (public SNI)
+PASS  internal app body served
+PASS  internal SNI + public Host -> 200
+PASS  public SNI cert does not mention internal zone
+
+-- 11 passed, 0 failed --
+RESULT PASS

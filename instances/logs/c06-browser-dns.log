@@ -1,0 +1,15 @@
+== c06 browser path ==
+PASS  JSON negotiated by default
+PASS  HTML negotiated with Accept: text/html
+PASS  browsable renderer is Django REST framework
+PASS  SPA shell 200
+PASS  bundle names the API base
+PASS  leaf cert exists
+PASS  leaf verifies against the lab CA
+PASS  served cert is the lab leaf
+PASS  chatadmin.corp.lab answers without redirects
+PASS  chat-api.corp.lab answers without redirects
+PASS  no autoindex on the API host
+
+-- 11 passed, 0 failed --
+RESULT PASS

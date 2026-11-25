@@ -1,0 +1,67 @@
+C05 - JS BUNDLE TO SECOND VHOST (404 SIGNATURES)
+=================================================
+Lab      : c05-js-api-pivot
+Case     : C5 (writeup para 44-48)
+Ports    : HTTP 18120, HTTPS 18483
+Start    : make up LAB=c05-js-api-pivot
+Verify   : make verify LAB=c05-js-api-pivot      (16 assertions)
+
+OBJECTIVE
+  The SPA calls a backend on another hostname. Prove that hostname is real by
+  comparing 404 signatures instead of trusting a string in a bundle - and
+  recognise the decoy URL.
+
+STEP 1 - read the bundle
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18483/chatadmin/assets/app.js | grep -E 'API_BASE|STAGING_API'
+
+  expected:
+    API_BASE: "https://chat-api.corp.lab/api",
+    STAGING_API: "https://chat-staging.corp.lab/api",
+
+STEP 2 - the signature test (the actual technique)
+  curl -skI -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/nope | grep -i server
+  expected: server: Microsoft-IIS/10.0      (a site answered)
+  curl -skI https://127.0.0.1:18483/nope | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   (no site matched)
+  Same status code (404), different owner. That is the discriminator.
+
+  Body sizes, if you want the numbers:
+  curl -sk -o /dev/null -w '%{size_download}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18483/nope      # 936  (IIS error page)
+  curl -sk -o /dev/null -w '%{size_download}\n' https://127.0.0.1:18483/nope   # 0  (the wall)
+
+STEP 3 - the API is live, not just a name
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ | jq .
+  expected:
+    {"users":"/api/users/",
+     "auth/password_reset":"/api/auth/password_reset",
+     "chats":"/api/chats/",
+     "chat-status":"/api/chat-status"}
+
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/chat-status | jq .
+  expected: {"service":"chat-api","status":"ok","build":"2026.11.1"}
+  One working endpoint is what separates a vhost from a string.
+
+STEP 4 - the decoy
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-staging.corp.lab' \
+    https://127.0.0.1:18483/api/
+  expected: 404
+  curl -skI -H 'Host: chat-staging.corp.lab' https://127.0.0.1:18483/api/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   -> it was never a vhost
+
+STEP 5 - the two sites are different applications
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ | grep -c 'Chat Admin'
+  expected: 0
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ \
+    | tr -d '\r' | grep -i content-type
+  expected: content-type: application/json
+
+WHY IT MATTERS
+  A URL in a bundle is a hypothesis. Two independent signals confirm a vhost: a
+  Server header that belongs to a site, and a path that answers with that site's
+  application. The decoy has neither - which is how you avoid reporting a hostname
+  you invented from a string.
+
+TEARDOWN
+  make down LAB=c05-js-api-pivot

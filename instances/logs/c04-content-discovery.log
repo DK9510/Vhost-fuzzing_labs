@@ -1,0 +1,19 @@
+== c04 content discovery ==
+PASS  root is the IIS default page
+PASS  root carries the default-page marker
+PASS  missing path -> 404
+PASS  missing path body is the IIS 404 page
+PASS  404 body text
+PASS  /chatadmin -> 200
+PASS  /chatadmin/ -> 200
+PASS  app shell is served
+PASS  no directory listing
+PASS  /CHATADMIN -> 200
+PASS  /ChatAdmin/ -> 200
+PASS  /chatadmin.backup -> 403
+PASS  bundle is served
+PASS  bundle names the API base
+PASS  raft wordlist finds exactly /chatadmin
+
+-- 15 passed, 0 failed --
+RESULT PASS

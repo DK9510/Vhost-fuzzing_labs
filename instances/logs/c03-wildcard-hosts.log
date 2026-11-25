@@ -1,0 +1,22 @@
+== c03 wildcard host fuzzing ==
+PASS  10 decoy vhosts return byte-identical roots
+PASS  real vhost root is the same default page too
+PASS  decoy root status
+PASS  exactly one host serves /robots.txt
+PASS  that host is the planted vhost
+PASS  robots.txt points at the app
+PASS  exactly one host serves /chatadmin
+PASS  same host for app path
+PASS  decoy /chatadmin -> 404
+PASS  decoy 404 is the IIS error page
+PASS  old-portal -> 403
+PASS  old-portal 403 comes from HTTPAPI, not a site
+PASS  unlisted host -> 404
+PASS  unlisted host is HTTPAPI
+PASS  app path is case-insensitive
+PASS  asset lookup is case-insensitive
+PASS  ffuf: exactly one 200 on /chatadmin
+PASS  ffuf: the hit is chatadmin
+
+-- 18 passed, 0 failed --
+RESULT PASS

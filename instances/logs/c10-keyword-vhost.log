@@ -1,0 +1,30 @@
+== c10 keyword vhost ==
+PASS  Host: portal -> 200
+PASS  portal app identifies itself
+PASS  portal landing page
+PASS  portalstg.app.test same app
+PASS  app.portal.test same app
+PASS  chat.portal.corp.lab same app
+PASS  Host: PORTAL (case) -> 200
+PASS  Host: portal:443 (port) -> 200
+PASS  Host: portal.attacker.test -> 200
+PASS  attacker domain gets the same app
+PASS  Host: portal. (trailing dot) -> 404
+PASS  trailing-dot answer is the HTTPAPI wall
+PASS  exact vhost still served
+PASS  exact vhost is the SPA, not the portal
+PASS  Host: vpn.corp.lab -> 403 (bait)
+PASS  no Host header -> 404
+PASS  portal over :80 -> 200
+PASS  dashboard refused anonymously (401/403)
+PASS  agent login through the keyword route returns a token
+PASS  dashboard with a token -> 200
+PASS  sweep flags the portal family + the vpn bait
+PASS  sweep flags the bare keyword
+PASS  the 403 bait is flagged too (an anomaly is an anomaly)
+PASS  vpn anomaly is a 403, not an app
+PASS  no word outside the keyword family is flagged
+PASS  sweep records >=2 agreeing shapes for 'portal'
+
+-- 26 passed, 0 failed --
+RESULT PASS

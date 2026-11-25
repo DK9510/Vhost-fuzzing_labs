@@ -1,0 +1,86 @@
+{
+  "http_addr": ":8080",
+  "https_addr": ":8443",
+  "cert_file": "/certs/lab.crt",
+  "key_file": "/certs/lab.key",
+  "default_server": "Microsoft-HTTPAPI/2.0",
+  "sites": [
+    {
+      "host": "chatadmin.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "case_insensitive": true,
+      "paths": [
+        { "prefix": "/chatadmin/", "upstream": "http://172.28.30.20:80", "rewrite": "/real/chatadmin/" },
+        { "prefix": "/chatadmin", "upstream": "http://172.28.30.20:80", "rewrite": "/real/chatadmin/index.html" },
+        { "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/real/" }
+      ]
+    },
+    {
+      "host": "vpn.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d01/" }]
+    },
+    {
+      "host": "intranet.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d02/" }]
+    },
+    {
+      "host": "owa.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d03/" }]
+    },
+    {
+      "host": "citrix.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d04/" }]
+    },
+    {
+      "host": "sso.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d05/" }]
+    },
+    {
+      "host": "webmail.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d06/" }]
+    },
+    {
+      "host": "remote.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d07/" }]
+    },
+    {
+      "host": "files.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d08/" }]
+    },
+    {
+      "host": "sharepoint.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d09/" }]
+    },
+    {
+      "host": "monitor.corp.lab",
+      "upstream": "http://172.28.30.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [{ "prefix": "/", "upstream": "http://172.28.30.20:80", "rewrite": "/d10/" }]
+    },
+    {
+      "host": "old-portal.corp.lab",
+      "status": 403,
+      "body_file": "/sites/403.html",
+      "server": "Microsoft-HTTPAPI/2.0"
+    }
+  ]
+}

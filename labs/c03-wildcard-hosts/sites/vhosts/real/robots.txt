@@ -1,0 +1,3 @@
+User-agent: *
+Disallow: /chatadmin
+Disallow: /chatadmin/api

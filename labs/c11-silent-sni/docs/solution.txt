@@ -1,0 +1,38 @@
+C11 - SILENT FRONT END: NO SNI OR NO HOST, NO ANSWER
+=====================================================
+Lab      : c11-silent-sni
+Case     : C11 (your case: routing that drops instead of answering)
+Ports    : HTTP 18190, HTTPS 18553
+Start    : make up LAB=c11-silent-sni
+Verify   : make verify LAB=c11-silent-sni      (20 assertions)
+
+OBJECTIVE
+  A front end that answers nothing unless the TLS handshake carries the right SNI
+  AND the request carries the right Host. Bare IP, wrong SNI, wrong Host: the socket
+  stays open and no byte comes back. Learn to tell silence from 404/403/reset, and
+  learn why silence is the hardest evidence to work with.
+
+WHAT YOU GET
+  - https://127.0.0.1:18553 and http://127.0.0.1:18190 - nothing answers there.
+  - The site is ops.corp.lab (an "Ops Console"). You have to know the name before
+    the front end says anything at all.
+
+RULES OF THE LAB
+  - require_sni: no SNI or an unexpected SNI stalls the handshake (no ServerHello).
+  - require_host: the Host is compared literally (case and port normalised, trailing
+    dot NOT normalised). A mismatch is dropped after the handshake, with no status.
+  - The front end holds the connection ~10-20s and never writes a byte, so your
+    client's own timeout is what you observe.
+
+SUCCESS CRITERION
+  bash checks/verify.sh. As a human: you can state which of your tools would have
+  reported "nothing here" and why that is not evidence of absence.
+
+HINTS
+  1. curl exit code 28 = timeout; 000 as the status alone proves nothing (a reset
+     looks similar). Assert on the exit code.
+  2. No SNI means no certificate: openssl s_client without -servername gets nothing.
+     That is why passive certificate discovery fails against this front end.
+  3. On :80 there is no SNI - only Host. Try the name there to confirm it exists
+     before blaming TLS.
+  4. The allow-list is literal: ops.corp.lab:443 matches, ops.corp.lab. does not.

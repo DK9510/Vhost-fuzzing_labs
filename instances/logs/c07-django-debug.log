@@ -1,0 +1,26 @@
+== c07 Django DEBUG -> reset token ==
+PASS  API root 200
+PASS  API root lists the reset route
+PASS  password_reset -> 500
+PASS  technical page is large (>50 KB)
+PASS  page is a Django traceback
+PASS  the SMTP failure is the exception
+PASS  reset token harvested from the debug page
+PASS  the drafted mail body is in the traceback
+PASS  the reset page reflects DEBUG=True (settings section)
+PASS  confirm with harvested token -> 200
+PASS  replay the same token -> 400
+PASS  login with the new password returns a token
+PASS  the account is the admin
+PASS  admin chats readable
+PASS  flag present in admin chats
+PASS  agent login works
+PASS  agent chats are readable
+PASS  agent chats do not contain the flag
+PASS  anonymous /api/users/ refused (401/403)
+PASS  admin /api/users/ 200
+PASS  /api/nope -> 404
+PASS  404 has no traceback
+
+-- 22 passed, 0 failed --
+RESULT PASS

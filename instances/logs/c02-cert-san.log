@@ -1,0 +1,15 @@
+== c02 certificate SAN/CN ==
+PASS  openssl: SAN carries *.corp.lab
+PASS  openssl: SAN carries the apex corp.lab
+PASS  openssl: SAN carries mail.corp.lab (red herring)
+PASS  tlsx: subject_cn
+PASS  tlsx: SAN includes wildcard
+PASS  tlsx: wildcard_certificate
+PASS  mail.corp.lab (cert name, no site) -> 404
+PASS  apex corp.lab -> 200
+PASS  random subdomain of the wildcard -> 404
+PASS  random subdomain still HTTPAPI 404
+PASS  no-SNI handshake returns the same cert names
+
+-- 11 passed, 0 failed --
+RESULT PASS

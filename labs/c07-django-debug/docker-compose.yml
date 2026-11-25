@@ -1,0 +1,64 @@
+name: vhc07
+
+services:
+  edge:
+    image: vhostlab/edge:1.0
+    container_name: vhc07-edge
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:18140:8080"
+      - "0.0.0.0:18503:8443"
+    volumes:
+      - ./edge/sites.json:/etc/vhostlab/sites.json:ro
+      - ./edge/certs:/certs:ro
+      - ./sites:/sites:ro
+    networks:
+      lab:
+
+  api:
+    image: vhostlab/api:1.0
+    container_name: vhc07-api
+    restart: unless-stopped
+    environment:
+      DEBUG: "1"
+      BROWSABLE: "0"
+      FLAG: "${FLAG:-FLAG{django_debug_leaked_the_reset_token}}"
+      BASE_DOMAIN: "corp.lab"
+      API_HOST: "chat-api.corp.lab"
+      FRONT_URL: "https://chatadmin.corp.lab"
+      ADMIN_EMAIL: "admin@corp.lab"
+      ADMIN_PASSWORD: "Sup3rS3cret!2026"
+      AGENT_PASSWORD: "agent-pass-2026"
+      JWT_KEY: "vhc07-jwt-key-do-not-reuse"
+      SECRET_KEY: "vhc07-django-secret"
+      DB_PATH: "/data/db.sqlite3"
+      EMAIL_HOST: "127.0.0.1"
+      EMAIL_PORT: "2525"
+      DEFAULT_FROM_EMAIL: "no-reply@corp.lab"
+    volumes:
+      - api-data:/data
+    networks:
+      lab:
+        ipv4_address: 172.28.70.21
+
+  site-spa:
+    image: nginx:alpine
+    container_name: vhc07-spa
+    restart: unless-stopped
+    volumes:
+      - ./sites/spa:/spa:ro
+      - ./sites/spa/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.70.20
+
+volumes:
+  api-data:
+    name: vhc07-api-data
+
+networks:
+  lab:
+    name: vhc07-lab
+    ipam:
+      config:
+        - subnet: 172.28.70.0/24

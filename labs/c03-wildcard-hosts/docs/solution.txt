@@ -1,0 +1,67 @@
+C03 - WILDCARD HOST-HEADER FUZZING WITH DECOYS
+===============================================
+Lab      : c03-wildcard-hosts
+Case     : C3 (writeup para 16, 30)
+Ports    : HTTP 18100, HTTPS 18463
+Start    : make up LAB=c03-wildcard-hosts
+Verify   : make verify LAB=c03-wildcard-hosts      (18 assertions)
+
+OBJECTIVE
+  The certificate says *.corp.lab and the IP answers 404 to everything.
+  Enumerate labels, send them as Host headers, find the one vhost that serves an
+  application - without claiming the decoys.
+
+STEP 1 - baseline the noise
+  For ten decoys the root is byte-identical. Compare hashes, not lengths:
+    for h in vpn intranet owa citrix sso webmail remote files sharepoint monitor; do
+      printf '%-12s ' "$h"
+      curl -sk -H "Host: $h.corp.lab" https://127.0.0.1:18463/ | shasum -a1 | cut -c1-12
+    done
+  expected: every line ends with the same hash (f94b52ccf1c2)
+
+STEP 2 - find what a real site has and a default page does not
+  while read -r w; do
+    [ "$(curl -sk -o /dev/null -w '%{http_code}' -H "Host: $w.corp.lab" \
+        https://127.0.0.1:18463/robots.txt)" = 200 ] && echo "HIT $w.corp.lab"
+  done < _shared/data/vhost-labels.txt
+  expected: HIT chatadmin.corp.lab
+
+STEP 3 - the same with ffuf (the writeup's Burp Intruder equivalent)
+  ffuf -u https://127.0.0.1:18463/chatadmin \
+       -H 'Host: FUZZ.corp.lab' -w _shared/data/vhost-labels.txt \
+       -fc 403,404 -t 40 -of json -o /tmp/c03.json
+  jq -r '.results[] | "\(.status) \(.length) \(.input.FUZZ)"' /tmp/c03.json
+  expected: 200 357 chatadmin
+
+STEP 4 - read the winner
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18463/robots.txt
+  expected:
+    User-agent: *
+    Disallow: /chatadmin
+    Disallow: /chatadmin/api
+
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18463/chatadmin
+  expected: the "Chat Admin" shell (357 bytes)
+
+STEP 5 - understand the traps
+  403 bait - a rule matched, nothing is served:
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: old-portal.corp.lab' \
+      https://127.0.0.1:18463/
+    expected: 403   (Server: Microsoft-HTTPAPI/2.0 - no site)
+  decoys - 200 but the wrong body:
+    curl -sk -H 'Host: vpn.corp.lab' https://127.0.0.1:18463/chatadmin \
+      | grep -o '404 - File or directory not found.'
+    expected: the IIS error page, not an application
+
+STEP 6 - IIS path semantics (why a lowercase wordlist is enough)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18463/CHATADMIN
+  expected: 200
+
+WHY IT MATTERS
+  Status and length triage cannot separate ten identical decoys. The signal is
+  behaviour on a path only a real application would have. A 403 is a lead about
+  a rule, never a finding.
+
+TEARDOWN
+  make down LAB=c03-wildcard-hosts

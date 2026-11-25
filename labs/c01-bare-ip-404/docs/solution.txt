@@ -1,0 +1,63 @@
+C01 - BARE-IP 404 FINGERPRINT
+=====================================
+Lab      : c01-bare-ip-404
+Case     : C1 (writeup para 11-14)
+Ports    : HTTP 18080, HTTPS 18443
+Start    : make up LAB=c01-bare-ip-404
+Verify   : make verify LAB=c01-bare-ip-404      (13 assertions)
+
+OBJECTIVE
+  One IP answers on 443 with nothing useful. Establish that a virtual-host router
+  is in front and your request has no hostname it recognises, then prove the
+  contrast with a hostname it does know.
+
+STEP 1 - the wall
+  curl -skD - -o /dev/null https://127.0.0.1:18443/ | tr -d '\r'
+
+  expected (h2 by default; HEAD omits content-length, a GET does not):
+    HTTP/2 404
+    content-type: text/html
+    server: Microsoft-HTTPAPI/2.0
+    content-length: 0
+
+  add --http1.1 to see the classic line: HTTP/1.1 404 Not Found
+
+  Microsoft-HTTPAPI/2.0 is http.sys answering before any site binds the request.
+  A named HTTP platform + an empty body means "no site matched", not "file missing".
+
+STEP 2 - prove it is a wall, not a missing path
+  curl -sk -o /dev/null -w '%{http_code} %{size_download}\n' https://127.0.0.1:18443/admin
+  expected: 404 0
+  same status, same zero length on any path = the router produced it.
+
+STEP 3 - the contrast
+  curl -skD - -o /dev/null -H 'Host: ok.corp.lab' https://127.0.0.1:18443/ | tr -d '\r'
+  expected:
+    HTTP/2 200
+    server: Microsoft-IIS/10.0
+    content-length: 1487
+  Two distinct Server values:
+    Microsoft-HTTPAPI/2.0 -> no site matched
+    Microsoft-IIS/10.0    -> a site matched and answered
+
+STEP 4 - also true on plain HTTP (some fuzzers only speak :80)
+  curl -sk -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/
+  expected: 404
+  curl -skI http://127.0.0.1:18080/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0
+
+STEP 5 - no Host header at all
+  curl -sk -o /dev/null -w '%{http_code}\n' --http1.0 -H 'Host:' https://127.0.0.1:18443/
+  expected: 404 (still the wall)
+
+NEGATIVE CHECK (keeps the case honest)
+  'portal' as a Host is still a 404 here - keyword routing belongs to C10:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' https://127.0.0.1:18443/
+  expected: 404
+
+WHY IT MATTERS
+  This is the observation that converts "one boring IP" into a target: the site
+  exists, you are addressing it wrong. Next case reads the certificate for names.
+
+TEARDOWN
+  make down LAB=c01-bare-ip-404

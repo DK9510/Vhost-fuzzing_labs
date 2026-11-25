@@ -1,0 +1,45 @@
+name: vhc08
+
+services:
+  edge:
+    image: vhostlab/edge:1.0
+    container_name: vhc08-edge
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:18150:8080"
+      - "0.0.0.0:18513:8443"
+    volumes:
+      - ./edge/sites.json:/etc/vhostlab/sites.json:ro
+      - ./edge/certs:/certs:ro
+      - ./sites:/sites:ro
+    networks:
+      lab:
+
+  site-a:
+    image: nginx:alpine
+    container_name: vhc08-a
+    restart: unless-stopped
+    volumes:
+      - ./sites/a:/a:ro
+      - ./sites/a/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.80.20
+
+  site-b:
+    image: nginx:alpine
+    container_name: vhc08-b
+    restart: unless-stopped
+    volumes:
+      - ./sites/b:/b:ro
+      - ./sites/b/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      lab:
+        ipv4_address: 172.28.80.21
+
+networks:
+  lab:
+    name: vhc08-lab
+    ipam:
+      config:
+        - subnet: 172.28.80.0/24

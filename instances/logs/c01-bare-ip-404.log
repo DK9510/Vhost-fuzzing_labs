@@ -1,0 +1,17 @@
+== c01 bare-IP 404 ==
+PASS  bare IP  -> 404
+PASS  bare IP  Server: Microsoft-HTTPAPI/2.0
+PASS  bare IP  Content-Length: 0
+PASS  bare IP  no X-Powered-By
+PASS  bare IP over :80 -> 404
+PASS  bare IP over :80 Server
+PASS  bare IP body stable across requests
+PASS  bare IP body stable across paths
+PASS  valid Host -> 200
+PASS  valid Host Server: Microsoft-IIS/10.0
+PASS  valid Host serves the IIS default page
+PASS  HTTP/1.0 without Host -> 404
+PASS  'portal' Host is still a 404 here
+
+-- 13 passed, 0 failed --
+RESULT PASS

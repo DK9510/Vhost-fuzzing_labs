@@ -1,0 +1,534 @@
+{
+  "http_addr": ":8080",
+  "https_addr": ":8443",
+  "cert_file": "/certs/lab.crt",
+  "key_file": "/certs/lab.key",
+  "default_server": "Microsoft-HTTPAPI/2.0",
+  "sites": [
+    {
+      "host": "chatadmin.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "case_insensitive": true,
+      "paths": [
+        {
+          "prefix": "/app/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/real/app/"
+        },
+        {
+          "prefix": "/app",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/real/app/index.html"
+        },
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/real/"
+        }
+      ]
+    },
+    {
+      "host": "vpn.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-vpn/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "intranet.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-intranet/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "owa.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-owa/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "citrix.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-citrix/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "sso.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-sso/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "old-portal.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-old-portal/"
+        }
+      ]
+    },
+    {
+      "host": "chat-api.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-chat-api/"
+        }
+      ]
+    },
+    {
+      "host": "webmail.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-webmail/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "remote.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-remote/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "portal.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-portal/"
+        }
+      ]
+    },
+    {
+      "host": "portalstg.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-portalstg/"
+        }
+      ]
+    },
+    {
+      "host": "app.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app/"
+        }
+      ]
+    },
+    {
+      "host": "api.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-api/"
+        }
+      ]
+    },
+    {
+      "host": "admin.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-admin/"
+        }
+      ]
+    },
+    {
+      "host": "dashboard.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-dashboard/"
+        }
+      ]
+    },
+    {
+      "host": "files.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-files/"
+        }
+      ],
+      "app_header": {
+        "X-Forwarded-Host": "chatadmin.corp.lab",
+        "X-Backend": "chatadmin"
+      }
+    },
+    {
+      "host": "sharepoint.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-sharepoint/"
+        }
+      ]
+    },
+    {
+      "host": "reports.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-reports/"
+        }
+      ]
+    },
+    {
+      "host": "hr.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-hr/"
+        }
+      ]
+    },
+    {
+      "host": "payroll.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-payroll/"
+        }
+      ]
+    },
+    {
+      "host": "helpdesk.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-helpdesk/"
+        }
+      ]
+    },
+    {
+      "host": "status.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-status/catchall.html",
+          "drop_path": true
+        }
+      ]
+    },
+    {
+      "host": "monitor.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-monitor/catchall.html",
+          "drop_path": true
+        }
+      ]
+    },
+    {
+      "host": "app01.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app01/"
+        }
+      ]
+    },
+    {
+      "host": "app02.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app02/"
+        }
+      ]
+    },
+    {
+      "host": "app03.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app03/"
+        }
+      ]
+    },
+    {
+      "host": "app04.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app04/"
+        }
+      ]
+    },
+    {
+      "host": "app05.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app05/"
+        }
+      ]
+    },
+    {
+      "host": "app06.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app06/"
+        }
+      ]
+    },
+    {
+      "host": "app07.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app07/"
+        }
+      ]
+    },
+    {
+      "host": "app08.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app08/"
+        }
+      ]
+    },
+    {
+      "host": "app09.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app09/"
+        }
+      ]
+    },
+    {
+      "host": "app10.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app10/"
+        }
+      ]
+    },
+    {
+      "host": "app11.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app11/"
+        }
+      ]
+    },
+    {
+      "host": "app12.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app12/"
+        }
+      ]
+    },
+    {
+      "host": "app13.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app13/"
+        }
+      ]
+    },
+    {
+      "host": "app14.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app14/"
+        }
+      ]
+    },
+    {
+      "host": "app15.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app15/"
+        }
+      ]
+    },
+    {
+      "host": "app16.corp.lab",
+      "upstream": "http://172.28.90.20:80",
+      "server": "Microsoft-IIS/10.0",
+      "paths": [
+        {
+          "prefix": "/",
+          "upstream": "http://172.28.90.20:80",
+          "rewrite": "/d-app16/"
+        }
+      ]
+    }
+  ]
+}

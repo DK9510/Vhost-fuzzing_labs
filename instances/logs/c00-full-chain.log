@@ -1,0 +1,24 @@
+== c00 full chain ==
+PASS  bare IP -> 404
+PASS  bare IP Server
+PASS  cert SAN carries *.corp.lab
+PASS  vhost sweep finds the site
+PASS  app root 200
+PASS  app is the console
+PASS  bundle API base
+PASS  api vhost 404 signature
+PASS  reset -> 500
+PASS  traceback present
+PASS  token harvested
+PASS  reset redeemed
+PASS  admin login
+PASS  flag via admin chats
+PASS  keyword app answers
+PASS  keyword app identity
+PASS  trailing-dot gap
+PASS  decoy root identical to the real root
+PASS  403 bait stays a 403
+PASS  unlisted host -> 404
+
+-- 20 passed, 0 failed --
+RESULT PASS

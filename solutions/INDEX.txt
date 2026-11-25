@@ -1,0 +1,17 @@
+vhostlab - SOLUTION FILES
+
+LAB                        FILE
+c00-full-chain             labs/c00-full-chain/docs/solution.txt
+c01-bare-ip-404            labs/c01-bare-ip-404/docs/solution.txt
+c02-cert-san               labs/c02-cert-san/docs/solution.txt
+c03-wildcard-hosts         labs/c03-wildcard-hosts/docs/solution.txt
+c04-content-discovery      labs/c04-content-discovery/docs/solution.txt
+c05-js-api-pivot           labs/c05-js-api-pivot/docs/solution.txt
+c06-browser-dns            labs/c06-browser-dns/docs/solution.txt
+c07-django-debug           labs/c07-django-debug/docs/solution.txt
+c08-sni-routing            labs/c08-sni-routing/docs/solution.txt
+c09-decoy-fuzz             labs/c09-decoy-fuzz/docs/solution.txt
+c10-keyword-vhost          labs/c10-keyword-vhost/docs/solution.txt
+c11-silent-sni             labs/c11-silent-sni/docs/solution.txt
+
+ALL                        solutions/ALL_SOLUTIONS.txt

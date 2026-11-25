@@ -1,0 +1,97 @@
+C10 - KEYWORD-MATCHED VHOST (A WORD IN THE HOST HEADER)
+========================================================
+Lab      : c10-keyword-vhost
+Case     : C10 (your case: front-end routes on a Host substring)
+Ports    : HTTP 18170, HTTPS 18533
+Start    : make up LAB=c10-keyword-vhost
+Verify   : make verify LAB=c10-keyword-vhost      (26 assertions)
+
+OBJECTIVE
+  One application is not addressed by a hostname at all: the front end routes on a
+  substring of the Host header. portal, portalstg.app.test, app.portal.test, PORTAL,
+  portal:443 and even portal.attacker.test all land on it. DNS enumeration will never
+  show it; only whole-value Host fuzzing will.
+
+STEP 1 - whole-value Host fuzzing (not subdomain enumeration)
+  ffuf -u https://127.0.0.1:18533/ -H 'Host: FUZZ' \
+       -w _shared/data/host-keywords.txt -ac -t 40 -of json -o /tmp/c10.json
+  jq -r '.results[] | "\(.status) \(.input.FUZZ)"' /tmp/c10.json | head
+  expected: several 200s whose payload contains "portal"
+
+STEP 2 - the shape family (all one application)
+  for h in portal portalstg.app.test app.portal.test chat.portal.corp.lab PORTAL portal:443; do
+    printf '%-24s ' "$h"
+    curl -sk -o /dev/null -w '%{http_code} ' -H "Host: $h" https://127.0.0.1:18533/
+    curl -sk -H "Host: $h" https://127.0.0.1:18533/ | shasum -a1 | cut -c1-12
+  done
+  expected: every line 200 with the SAME hash (the portal landing page)
+
+  Identity header:
+  curl -skI -H 'Host: portal' https://127.0.0.1:18533/ | grep -i x-app
+  expected: x-app: portal
+
+STEP 3 - the reportable part: no domain allowlist
+  curl -sk -H 'Host: portal.attacker.test' https://127.0.0.1:18533/ | grep -o '<h1>Portal</h1>'
+  expected: <h1>Portal</h1>
+  Any domain containing the word reaches the app. If that front end is reachable,
+  an attacker who controls DNS can serve it under their own name.
+
+STEP 4 - the normalisation gaps
+  Trailing dot: a suffix rule fires before the contains rule
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.' https://127.0.0.1:18533/
+    expected: 404
+    curl -skI -H 'Host: portal.' https://127.0.0.1:18533/ | grep -i server
+    expected: server: Microsoft-HTTPAPI/2.0
+
+  Case and port are normalised
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: PORTAL' https://127.0.0.1:18533/       # 200
+    curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal:443' https://127.0.0.1:18533/   # 200
+
+STEP 5 - precedence: exact hostnames beat keyword rules
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18533/chatadmin
+  expected: 200
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18533/chatadmin \
+    | grep -o 'Chat Admin'
+  expected: Chat Admin   (the SPA, not the portal)
+
+STEP 6 - bait: a keyword route that answers 403 is not a win
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: vpn.corp.lab' https://127.0.0.1:18533/
+  expected: 403
+
+STEP 7 - plain HTTP and missing Host behave the same
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' http://127.0.0.1:18170/   # 200
+  curl -sk -o /dev/null -w '%{http_code}\n' --http1.0 -H 'Host:' https://127.0.0.1:18533/  # 404
+
+STEP 8 - discovery is not the finding: the dashboard needs a login
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal' https://127.0.0.1:18533/dashboard
+  expected: 401 or 403
+
+  TOK=$(curl -sk -H 'Host: portal' -H 'Content-Type: application/json' \
+    -d '{"email":"alex@corp.lab","password":"agent-pass-2026"}' \
+    https://127.0.0.1:18533/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: portal' -H "Authorization: Bearer $TOK" \
+    https://127.0.0.1:18533/dashboard | jq .
+  expected:
+    {"portal":"dashboard","user":"alex@corp.lab","role":"agent","chats":3}
+
+STEP 9 - the reusable sweep
+  bash scripts/keyword-sweep.sh https://127.0.0.1:18533 \
+       _shared/data/host-keywords.txt corp.lab
+  expected summary line:
+    words with a repeated off-baseline fingerprint:
+      portal portal-dev portal-legacy portal-old portal2 portalnew portalprod portalstg vpn
+  Every word containing the keyword is flagged, plus the vpn 403 bait. Nothing else.
+  A hit needs two shapes agreeing - one weird status is noise.
+
+WHY IT MATTERS (and when it is reportable)
+  Front ends built on ARR ServerName rules, nginx server_name wildcards, App Service
+  default domains or Envoy :authority regexes end up routing on part of the name.
+  Consequences: the app is invisible to DNS/crt.sh/Host: name.<base> fuzzing; the
+  rule has no domain allowlist, so any attacker-controlled hostname reaches it; and
+  case/port/trailing-dot normalisation is where bypasses live. Routing alone is not
+  a finding - the dashboard requires a token, which is why this lab grades on an
+  authenticated response, not a 200.
+
+TEARDOWN
+  make down LAB=c10-keyword-vhost

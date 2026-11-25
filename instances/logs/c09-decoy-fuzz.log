@@ -1,0 +1,19 @@
+== c09 decoy discipline ==
+PASS  40 vhosts configured
+PASS  real host /robots.txt 200
+PASS  real host /app 200
+PASS  real app has the marker
+PASS  exactly one true hit among 40 hosts
+PASS  the hit is the planted host
+PASS  catch-all decoys answer 200 on /app (>=2)
+PASS  catch-all decoy monitor.corp.lab returns 200 on /app
+PASS  catch-all monitor body has no app marker
+PASS  catch-all decoy status.corp.lab returns 200 on /app
+PASS  catch-all status body has no app marker
+PASS  8 decoys echo X-Forwarded-Host
+PASS  none of the lures carry the app
+PASS  39 decoy roots are byte-identical
+PASS  unlisted host -> 404
+
+-- 15 passed, 0 failed --
+RESULT PASS

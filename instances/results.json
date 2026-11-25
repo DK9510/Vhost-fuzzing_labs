@@ -1,0 +1,19 @@
+{
+  "generated": "2026-11-25T06:58:05Z",
+  "labs_total": 12,
+  "labs_passed": 12,
+  "results": [
+    {"lab":"c00-full-chain","case":"c00","verdict":"PASS","passes":20,"fails":0,"log":"instances/logs/c00-full-chain.log"},
+    {"lab":"c01-bare-ip-404","case":"c01","verdict":"PASS","passes":13,"fails":0,"log":"instances/logs/c01-bare-ip-404.log"},
+    {"lab":"c02-cert-san","case":"c02","verdict":"PASS","passes":11,"fails":0,"log":"instances/logs/c02-cert-san.log"},
+    {"lab":"c03-wildcard-hosts","case":"c03","verdict":"PASS","passes":18,"fails":0,"log":"instances/logs/c03-wildcard-hosts.log"},
+    {"lab":"c04-content-discovery","case":"c04","verdict":"PASS","passes":15,"fails":0,"log":"instances/logs/c04-content-discovery.log"},
+    {"lab":"c05-js-api-pivot","case":"c05","verdict":"PASS","passes":16,"fails":0,"log":"instances/logs/c05-js-api-pivot.log"},
+    {"lab":"c06-browser-dns","case":"c06","verdict":"PASS","passes":11,"fails":0,"log":"instances/logs/c06-browser-dns.log"},
+    {"lab":"c07-django-debug","case":"c07","verdict":"PASS","passes":22,"fails":0,"log":"instances/logs/c07-django-debug.log"},
+    {"lab":"c08-sni-routing","case":"c08","verdict":"PASS","passes":11,"fails":0,"log":"instances/logs/c08-sni-routing.log"},
+    {"lab":"c09-decoy-fuzz","case":"c09","verdict":"PASS","passes":15,"fails":0,"log":"instances/logs/c09-decoy-fuzz.log"},
+    {"lab":"c10-keyword-vhost","case":"c10","verdict":"PASS","passes":26,"fails":0,"log":"instances/logs/c10-keyword-vhost.log"},
+    {"lab":"c11-silent-sni","case":"c11","verdict":"PASS","passes":20,"fails":0,"log":"instances/logs/c11-silent-sni.log"}
+  ]
+}

